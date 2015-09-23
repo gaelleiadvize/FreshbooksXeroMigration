@@ -1,0 +1,24 @@
+{
+  "name": "freshbooksToXero",
+  "version": "0.0.0",
+  "description": "Invoices paid freshbooks migration to Xero",
+  "main": "index.js",
+  "scripts": {
+    "paid": "node paid.js",
+    "partial": "node partial.js"
+  },
+  "author": "Gaëlle Acas",
+  "license": "ISC",
+  "dependencies": {
+    "better-assert": "^1.0.2",
+    "use-strict": "^1.0.0",
+    "common-env": "^5.0.0",
+    "freshbooks": "^0.2.1",
+    "lodash": "^3.10.1",
+    "moment": "^2.10.6",
+    "promise": "^7.0.4",
+    "when": "^3.7.3",
+    "winston": "^1.0.1",
+    "xero": "0.0.8"
+  }
+}
