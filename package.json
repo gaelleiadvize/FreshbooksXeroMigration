@@ -2,6 +2,10 @@
   "name": "freshbooksToXero",
   "version": "0.0.0",
   "description": "Invoices paid freshbooks migration to Xero",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gaelleiadvize/FreshbooksXeroMigration"
+  },
   "main": "index.js",
   "scripts": {
     "paid": "node paid.js",

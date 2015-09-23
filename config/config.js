@@ -2,9 +2,6 @@
 
 module.exports = function(logger) {
   var env = require('common-env/withLogger')(logger);
-  var fs = require('fs');
-  var contents = '';
-  contents = fs.readFileSync('./config/key.pem', 'utf8');
 
   return env.getOrElseAll({
     freshbooks: {
