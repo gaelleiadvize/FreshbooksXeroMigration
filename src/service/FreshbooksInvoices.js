@@ -1,6 +1,7 @@
 'use strict'
 
 var when = require('when');
+var traverse = require('traverse');
 
 
 module.exports = function(Freshbooks, Xero, logger) {
@@ -99,25 +100,13 @@ module.exports = function(Freshbooks, Xero, logger) {
 						when(json.Response)
 						//.then(JSON.stringify)
 						.then(function (items){
-							_.forEach(items.Invoices, function (items){
-								_.forEach(items, function (item){
-									if (item.ValidationErrors){
-										logger.error(item.ValidationErrors);
-										// _.forEach(item.ValidationErrors, function (error){
-										// });
-									} else {
-										logger.info(item);
-									}
-									logger.info("==============================================");
-								});
-							 	
-							 	
+							var InvoicesError = [];
+							traverse(items).forEach(function (item) {
+								if ('ValidationErrors' == this.key){
+									InvoicesError.push(this.parent.node.InvoiceNumber);
+								}								
 							});
-						});
-
-						//logger.info(json.Response);
-						_.forEach(json, function (item){
-							//logger.info(item.Response);
+							logger.error(InvoicesError);
 						});
 						return resolve(invoiceList); 
 					}
