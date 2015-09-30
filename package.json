@@ -8,6 +8,7 @@
   },
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
     "paid": "node paid.js",
     "partial": "node partial.js"
   },
