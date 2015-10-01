@@ -8,9 +8,7 @@
   },
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "paid": "node paid.js",
-    "partial": "node partial.js"
+    "start": "node index.js"
   },
   "author": "Gaëlle Acas",
   "license": "ISC",
@@ -25,6 +23,7 @@
     "use-strict": "^1.0.0",
     "when": "^3.7.3",
     "winston": "^1.0.1",
-    "xero": "0.0.8"
+    "xero": "0.0.8",
+    "ya-csv": "^0.9.4"
   }
 }

@@ -253,6 +253,7 @@ module.exports = function(Freshbooks, Xero, logger) {
             }
         });
         deferred.resolve(data);
+
         return deferred.promise;
     }
 
