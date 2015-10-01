@@ -16,34 +16,37 @@ module.exports = function(Xero, logger) {
 
         if (filters) {
 
-            //filters=['AP418', 'AP266'];
             var string = '&where=';
+            var i=0;
             _.forEach(filters, function (item){
-                string += 'InvoiceNumber=="' + item + '" OR ';
+                if (i<= 50) {
+                    string += 'InvoiceNumber=="' + item + '" OR ';
+                }
+
+                i++;
             })
 
             var filterString = _.trimRight(string, 'OR ');
 
         }
         logger.debug ('/Invoices/?page=' + page + filterString);
-        //Xero.call('GET', '/Invoices/?page=' + page + filterString, null, function(err, json) {
-        //    logger.info('Invoices page : ' + page);
-        //    if (err) {
-        //        logger.error(err);
-        //    } else {
-        //        _.forEach(json.Response.Invoices, function(invoice) {
-        //           // invoiceList.push(invoice);
-        //            logger.debug(invoice);
-        //        });
-        //        //
-        //        //var nbInvoices = _.size(invoices);
-        //        //if (nbInvoices) {
-        //        //    deferred.resolve(listInvoices(status, page + 1));
-        //        //} else {
-        //        //    deferred.resolve(invoiceList);
-        //        //}
-        //    }
-        //});
+        Xero.call('GET', '/Invoices/?page=' + page + filterString, null, function(err, json) {
+            logger.info('Invoices page : ' + page);
+            if (err) {
+                logger.error(err);
+            } else {
+                _.forEach(json.Response.Invoices.Invoice, function(invoice) {
+                    invoiceList.push(invoice);
+                });
+                //
+                //var nbInvoices = _.size(invoices);
+                //if (nbInvoices) {
+                //    deferred.resolve(listInvoices(status, page + 1));
+                //} else {
+                //    deferred.resolve(invoiceList);
+                //}
+            }
+        });
 
         return deferred.promise;
 
