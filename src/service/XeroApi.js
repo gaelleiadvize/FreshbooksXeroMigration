@@ -9,42 +9,26 @@ module.exports = function(Xero, logger) {
 
     var invoiceList = [];
 
-    function listInvoices(page, filters) {
+    function listInvoices(page, filter) {
 
 
         var deferred = when.defer();
 
-        if (filters) {
-
-            var string = '&where=';
-            var i=0;
-            _.forEach(filters, function (item){
-                if (i<= 50) {
-                    string += 'InvoiceNumber=="' + item + '" OR ';
-                }
-
-                i++;
-            })
-
-            var filterString = _.trimRight(string, 'OR ');
-
-        }
-        logger.debug ('/Invoices/?page=' + page + filterString);
-        Xero.call('GET', '/Invoices/?page=' + page + filterString, null, function(err, json) {
+        // logger.debug ('/Invoices/?page=' + page + filter);
+        Xero.call('GET', '/Invoices/?page=' + page + filter, null, function(err, json) {
             logger.info('Invoices page : ' + page);
             if (err) {
                 logger.error(err);
             } else {
-                _.forEach(json.Response.Invoices.Invoice, function(invoice) {
-                    invoiceList.push(invoice);
-                });
-                //
-                //var nbInvoices = _.size(invoices);
-                //if (nbInvoices) {
-                //    deferred.resolve(listInvoices(status, page + 1));
-                //} else {
-                //    deferred.resolve(invoiceList);
-                //}
+                if (json.Response.Invoices) {
+                    _.forEach(json.Response.Invoices.Invoice, function(invoice) {
+                        invoiceList.push(invoice);
+                    });
+
+                    deferred.resolve(listInvoices(page + 1, filter));
+                } else {
+                    deferred.resolve(invoiceList);
+                }
             }
         });
 
@@ -53,42 +37,110 @@ module.exports = function(Xero, logger) {
 
     }
 
+
+    function formatInvoiceNumberFilter(filters) {
+        var queryString = '';
+
+        if (filters) {
+            queryString = '&where=';
+            var i = 0;
+            _.forEach(filters, function(item) {
+                if (i <= 50) {
+                    queryString += 'InvoiceNumber=="' + item + '" OR ';
+                }
+                i++;
+            });
+
+            return _.trimRight(queryString, 'OR ');
+        }
+
+        return queryString;
+    }
+
     function getInvoiceList(csvData) {
 
         return when(csvData)
             .then(function(csvData) {
-                csvData = _.slice(csvData, 1, csvData.length);
+
                 var invoicesNumber = [];
-                _.forEach(csvData, function (invoice){
+                _.forEach(csvData, function(invoice) {
                     invoicesNumber.push(invoice[1]);
-                })
+                });
 
-                listInvoices(1, invoicesNumber);
-                //Xero.call('GET', '/Invoices/?where=InvoiceNumber=="AP418" OR InvoiceNumber=="AP266"&page=1', null, function(err, json) {
-                //    if (err) {
-                //        logger.error(err);
-                //    } else {
-                //
-                //        _.forEach(json, function(item) {
-                //            logger.debug(JSON.stringify(item));
-                //        });
-                //
-                //
-                //        return when.resolve(json);
-                //    }
-                //
-                //    logger.info('coucou');
-                //});
-
-
-                //var invoiceNumber = [];
-                //
-                //_.forEach(csvData, function(invoice) {
-                //    invoiceNumber.push(invoice);
-                //})
-                //
-                //return when.all(invoiceNumber);
+                return when.all(_.uniq(invoicesNumber));
+            })
+            .then(formatInvoiceNumberFilter)
+            .then(function(queryString) {
+                return listInvoices(1, queryString);
             });
+    }
+
+    function getRequestBody(xeroInvoices, csvInvoices) {
+
+
+        var XeroPostData = [];
+        var currentCsvLine = false;
+        var XeroProductData = [];
+        var i=0;
+        var j;
+        _.forEach(csvInvoices, function(csvItem) {
+            var invoiceNumber = csvItem[1];
+            var discountRate = csvItem[11];
+            var xeroIndex = _.findIndex(xeroInvoices, function(xeroItem) {
+                return xeroItem.InvoiceNumber == invoiceNumber;
+            });
+
+            if (_.gt(xeroIndex, -1)) {
+
+                if (currentCsvLine !== invoiceNumber) {
+                    j = 0;
+                    var currentPostData = [];
+                    XeroProductData = [];
+                    logger.debug('First line for ' + invoiceNumber);
+                    var productItems = xeroInvoices[xeroIndex].LineItems;
+                }
+
+                logger.debug(productItems);
+
+                var productItem = xeroInvoices[xeroIndex].LineItems.LineItem[j];
+                XeroProductData.push({
+                    LineItemID: productItem.LineItemID,
+                    Description: productItem.Description,
+                    UnitAmount : productItem.UnitAmount,
+                    DiscountRate : discountRate
+                });
+
+            //<Description>avr-12</Description>
+            //    <UnitAmount>-185.00</UnitAmount>
+            //    <AccountCode>200</AccountCode>
+            //    <Quantity>1.0000</Quantity>
+            //    <DiscountRate>5.00</DiscountRate>
+            //    <LineItemID>43138b35-9d9a-42fc-a921-41c38cc7c709</LineItemID>
+
+
+                logger.debug('current line : ' + invoiceNumber);
+                if (invoiceNumber != csvInvoices[i+1][1]) {
+                  //  logger.debug(XeroProductData);
+                    XeroPostData.push({
+                        InvoiceNumber: invoiceNumber,
+                        LineItems : XeroProductData
+                    })
+
+                    logger.debug('Last line for ' + invoiceNumber);
+                }
+
+                j++;
+            }
+            currentCsvLine = invoiceNumber;
+            i++;
+
+        });
+
+        logger.debug(XeroPostData);
+
+    }
+
+    function updateInvoice(data) {
 
 
     }
@@ -96,10 +148,22 @@ module.exports = function(Xero, logger) {
 
     return {
         updateDiscounts: function(csvData) {
+            csvData.shift();
+
             when(csvData)
                 .then(getInvoiceList)
-                .then(function(data) {
+                .then(function(xeroInvoices) {
+                    getRequestBody(xeroInvoices, csvData);
 
+                })
+                .then(updateInvoice)
+                .then(function(invoices) {
+
+                    //var test=  _.findIndex(invoices, function(chr) {
+                    //     return chr.InvoiceNumber == 'AP418';
+                    // });
+                    //
+                    // logger.debug(invoices[1]);
                     return true;
                 });
         }

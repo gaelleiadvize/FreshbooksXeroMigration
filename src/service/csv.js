@@ -6,7 +6,7 @@ var csv = require('ya-csv');
 
 module.exports = function(logger) {
 
-    function readCsv(fileName) {
+    function readCsv(fileName, index) {
         var deferred = when.defer();
 
         var path = './input/' + fileName + '.csv';
@@ -16,7 +16,7 @@ module.exports = function(logger) {
             'separator': ',',
             'quote': '"',
             'escape': '"',
-            'comment': '',
+            'comment': ''
         });
 
        var allEntries = [];
@@ -24,12 +24,16 @@ module.exports = function(logger) {
         //reader.setColumnNames(['firstName', 'lastName', 'username']);
         reader.addListener('data', function(data) {
             //this gets called on every row load
-            allEntries.push(data);
+           //if (index) {
+           //    allEntries[data[index]] = data;
+           //} else  {
+                allEntries.push(data);
+           //}
+
         });
         reader.addListener('end', function(data) {
             //this gets called when it's finished loading the entire file
             deferred.resolve(allEntries);
-
         });
 
         return deferred.promise;
@@ -37,8 +41,8 @@ module.exports = function(logger) {
     }
 
     return {
-        parse: function(fileName) {
-            return readCsv(fileName);
+        parse: function(fileName, index) {
+            return readCsv(fileName, index);
         }
     }
 
