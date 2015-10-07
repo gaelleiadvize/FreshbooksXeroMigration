@@ -32,9 +32,13 @@ module.exports = function(Xero, logger) {
                 });
             } else {
                 if (json.Response.Invoices) {
-                    _.forEach(json.Response.Invoices.Invoice, function(invoice) {
-                        invoiceList.push(invoice);
-                    });
+                    if (_.isArray(json.Response.Invoices.Invoice)) {
+                        _.forEach(json.Response.Invoices.Invoice, function(invoice) {
+                            invoiceList.push(invoice);
+                        });
+                    } else {
+                        invoiceList.push(json.Response.Invoices.Invoice);
+                    }
 
                     deferred.resolve(listInvoices(page + 1, filter));
                 } else {
@@ -108,7 +112,7 @@ module.exports = function(Xero, logger) {
      * @returns {*}
      */
     function getItemsRequestBody(xeroInvoices, csvInvoices) {
-
+        assert(_.isArray(xeroInvoices));
         var XeroPostData = [];
         var currentCsvLine = false;
         var XeroProductData = [];
@@ -118,6 +122,7 @@ module.exports = function(Xero, logger) {
         _.forEach(csvInvoices, function(csvItem) {
             var invoiceNumber = csvItem[1];
             var discountRate = csvItem[11];
+
             var xeroIndex = _.findIndex(xeroInvoices, function(xeroItem) {
                 return xeroItem.InvoiceNumber == invoiceNumber;
             });
