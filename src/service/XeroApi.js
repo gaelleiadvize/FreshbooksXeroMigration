@@ -27,7 +27,7 @@ module.exports = function(Xero, logger) {
             if (err) {
                 logger.error(err);
                 deferred.reject({
-                    status: fail,
+                    status: 'KO',
                     message: err
                 });
             } else {
@@ -186,7 +186,10 @@ module.exports = function(Xero, logger) {
         Xero.call('POST', '/Invoices/?SummarizeErrors=false', data, function(err, json) {
             if (err) {
                 logger.error(err);
-                deferred.reject(err);
+                deferred.reject({
+                    status: 'KO',
+                    message: err
+                });
             } else {
 
                 var InvoicesError = [];
@@ -198,7 +201,6 @@ module.exports = function(Xero, logger) {
                                     {
                                         invoice: this.parent.node.InvoiceNumber,
                                         message: this.node.ValidationError.Message
-
                                     }
                                 );
                             }
