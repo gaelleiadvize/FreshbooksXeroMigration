@@ -4,19 +4,32 @@ var when = require('when');
 var traverse = require('traverse');
 var moment = require('moment');
 
-
 module.exports = function(Xero, logger) {
+    assert(_.isObject(Xero));
+    assert(_.isObject(logger));
 
     var invoiceList = [];
 
+    /**
+     * List Xero invoices
+     *
+     * @param integer page current page
+     * @param string filter Invoices number list
+     * @returns {Promise|promise|*|Handler.promise|when.promise|Deferred.promise}
+     */
     function listInvoices(page, filter) {
+        assert(_.isNumber(page));
+        assert(_.isString(filter));
 
         var deferred = when.defer();
 
         Xero.call('GET', '/Invoices/?page=' + page + filter, null, function(err, json) {
-            logger.info('Invoices page : ' + page);
             if (err) {
                 logger.error(err);
+                deferred.reject({
+                    status: fail,
+                    message: err
+                });
             } else {
                 if (json.Response.Invoices) {
                     _.forEach(json.Response.Invoices.Invoice, function(invoice) {
@@ -33,14 +46,21 @@ module.exports = function(Xero, logger) {
         return deferred.promise;
     }
 
-
+    /**
+     * Format filter (invoice number)
+     *
+     * @param array filters Array of invoices number
+     *
+     * @returns {string}
+     */
     function formatInvoiceNumberFilter(filters) {
+        assert(_.isObject(filters));
 
         var queryString = '&where=Status == "DRAFT"';
 
         if (filters) {
             var max = 0;
-            queryString += ' AND ';
+            queryString += ' AND (';
             _.forEach(filters, function(item) {
                 if (max <= 50) {
                     queryString += 'InvoiceNumber=="' + item + '" OR ';
@@ -48,13 +68,20 @@ module.exports = function(Xero, logger) {
                 max++;
             });
 
-            return _.trimRight(queryString, 'OR ');
+            return _.trimRight(queryString, 'OR ') + ')';
         }
 
         return queryString;
     }
 
+    /**
+     * Get invoice list
+     *
+     * @param array csvData Invoice data from CSV
+     * @returns {*|Promise}
+     */
     function getInvoiceList(csvData) {
+        assert(_.isObject(csvData));
 
         return when(csvData)
             .then(function(csvData) {
@@ -72,8 +99,15 @@ module.exports = function(Xero, logger) {
             });
     }
 
-    function getRequestBody(xeroInvoices, csvInvoices) {
-
+    /**
+     * Get items request body
+     *
+     * @param Object xeroInvoices
+     * @param Object csvInvoices
+     *
+     * @returns {*}
+     */
+    function getItemsRequestBody(xeroInvoices, csvInvoices) {
 
         var XeroPostData = [];
         var currentCsvLine = false;
@@ -93,7 +127,6 @@ module.exports = function(Xero, logger) {
                 if (currentCsvLine !== invoiceNumber) {
                     indexItem = 0;
                     XeroProductData = [];
-                    logger.debug('First line for ' + invoiceNumber);
                 }
 
                 var productItem = xeroInvoices[xeroIndex].LineItems.LineItem;
@@ -109,14 +142,17 @@ module.exports = function(Xero, logger) {
                     DiscountRate: discountRate
                 });
 
-                logger.debug('current line : ' + invoiceNumber);
-                if (invoiceNumber != csvInvoices[i + 1][1]) {
+                if (csvInvoices[i + 1]) {
+                    var nextInvoiceNumber = csvInvoices[i + 1][1];
+                } else {
+                    var nextInvoiceNumber = false;
+                }
+
+                if (invoiceNumber != nextInvoiceNumber) {
                     XeroPostData.push({
                         InvoiceNumber: invoiceNumber,
                         LineItems: XeroProductData
                     });
-
-                    logger.debug('Last line for ' + invoiceNumber);
                 }
 
                 indexItem++;
@@ -130,6 +166,13 @@ module.exports = function(Xero, logger) {
 
     }
 
+    /**
+     * Update invoices
+     *
+     * @param Object data Data to update
+     *
+     * @returns {Promise|promise|*|Handler.promise|when.promise|Deferred.promise}
+     */
     function updateInvoice(data) {
 
         var deferred = when.defer();
@@ -141,7 +184,6 @@ module.exports = function(Xero, logger) {
                 deferred.reject(err);
             } else {
 
-
                 var InvoicesError = [];
                 when(json.Response)
                     .then(function(items) {
@@ -149,8 +191,8 @@ module.exports = function(Xero, logger) {
                             if ('ValidationErrors' == this.key) {
                                 InvoicesError.push(
                                     {
-                                        invoice : this.parent.node.InvoiceNumber,
-                                        message : this.node.ValidationError.Message
+                                        invoice: this.parent.node.InvoiceNumber,
+                                        message: this.node.ValidationError.Message
 
                                     }
                                 );
@@ -162,7 +204,7 @@ module.exports = function(Xero, logger) {
                         if (errors) {
                             logger.error(InvoicesError);
                         }
-                        logger.info((total - errors) + '/' +  total + ' INVOICE(S) UPDATED SUCCESSFUL !');
+                        logger.info((total - errors) + '/' + total + ' INVOICE(S) UPDATED SUCCESSFUL !');
 
                         return deferred.resolve(data);
                     });
@@ -170,9 +212,7 @@ module.exports = function(Xero, logger) {
         });
 
         return deferred.promise;
-
     }
-
 
     return {
         updateDiscounts: function(csvData) {
@@ -181,18 +221,12 @@ module.exports = function(Xero, logger) {
             when(csvData)
                 .then(getInvoiceList)
                 .then(function(xeroInvoices) {
-                    return getRequestBody(xeroInvoices, csvData);
+                    return getItemsRequestBody(xeroInvoices, csvData);
                 })
                 .then(updateInvoice)
-                .then(function(invoices) {
-
-                    //var test=  _.findIndex(invoices, function(chr) {
-                    //     return chr.InvoiceNumber == 'AP418';
-                    // });
-                    //
-                    // logger.debug(invoices[1]);
-                    return true;
+                .catch(function(err) {
+                    logger.error(err);
                 });
         }
     }
-}
+};
