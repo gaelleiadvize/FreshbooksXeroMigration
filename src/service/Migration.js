@@ -4,7 +4,7 @@ var when = require('when');
 var traverse = require('traverse');
 var moment = require('moment');
 
-module.exports = function(FreshbooksApi, XeroApi, logger) {
+module.exports = function (FreshbooksApi, XeroApi, logger) {
     assert(_.isObject(FreshbooksApi));
     assert(_.isObject(XeroApi));
     assert(_.isObject(logger));
@@ -20,8 +20,8 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
      */
     function setApprouved(invoices) {
 
-         return when.map(invoices, function(invoice) {
-           var isDraftInXero = _.includes(xeroDraftInvoicesNumber, invoice.number);
+        return when.map(invoices, function (invoice) {
+            var isDraftInXero = _.includes(xeroDraftInvoicesNumber, invoice.number);
 
             if (isDraftInXero) {
                 return {
@@ -32,28 +32,44 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
             return false;
         })
             .then(_.filter)
-            //.then(function (data){
-            //    logger.info(JSON.stringify(data));
-            //})
-            .then(XeroApi.approuved);
+            .then(XeroApi.approuved)
+            .then(function (data) {
+                return when.all(invoices);
+            });
+    }
+
+    /**
+     * Add payments in Xero invoices
+     * @param invoices
+     * @returns {*|Promise}
+     */
+    function addPayments(invoices) {
+
+        return when(invoices)
+            .then(FreshbooksApi.getPayments)
+            .then(function (data) {
+                logger.debug('COUCOU');
+            })
+            .then(XeroApi.updatePayments);
     }
 
     return {
 
-        paymentMigration: function(type, page) {
+        paymentMigration: function (type, page) {
 
             XeroApi.listDraftInvoices()
                 .then(function (draftInvoices) {
 
-                    _.forEach(draftInvoices, function (invoice){
+                    _.forEach(draftInvoices, function (invoice) {
                         xeroDraftInvoicesNumber.push(invoice.InvoiceNumber);
                     });
 
-                   return FreshbooksApi.listInvoices('PAID', 1);
+                    return FreshbooksApi.listInvoices('PAID', 1);
 
                 })
                 .then(setApprouved)
-                .then(function (data){
+                .then(addPayments)
+                .then(function (data) {
                     logger.info('coucou');
                 });
 

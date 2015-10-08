@@ -59,6 +59,7 @@ module.exports = function(Freshbooks, Cache, logger) {
                 } else {
                     logger.info('[freshbooks] On met en cache');
                     Cache.set('freshbooks-invoices', invoiceList);
+
                     deferred.resolve(invoiceList);
                 }
             }
@@ -67,9 +68,95 @@ module.exports = function(Freshbooks, Cache, logger) {
         return deferred.promise;
     }
 
+    function getPayment(invoice) {
+        var deferred = when.defer();
+
+        paymentApi.list({invoice_id: invoice.id}, function(err, payments, options) {
+            if (err) {
+                deferred.reject(err);
+            } else {
+
+                var paymentList = [];
+                var refundList = [];
+
+                _.forEach(payments, function(payment) {
+
+                    var paid = {
+                        Invoice: {
+                            InvoiceNumber: invoice.number
+                        },
+                        Amount: payment.amount,
+                        Account: {
+                            AccountID: '5c0bcc56-99a1-464d-ac45-defe718131ee'
+                        },
+                        Date: moment(payment.date).format('YYYY-MM-DD'),
+                        Reference: payment.type + ' - ' + payment.notes
+                    }
+
+                    paymentList.push(paid);
+
+                    // if (payment.type == 'Credit') {
+
+                    // 	var paid = {
+                    // 		CreditNote : {
+                    // 			CreditNoteNumber : payment.notes
+                    // 		},
+                    // 		Amount : payment.amount,
+                    // 		Account : {
+                    // 			AccountID : '5c0bcc56-99a1-464d-ac45-defe718131ee'
+                    // 		},
+                    // 		Date : moment(payment.date).format('YYYY-MM-DD'),
+                    // 		Reference : payment.type + ' - ' + payment.notes
+                    // 	}
+
+                    // 	paymentList.push(paid);
+
+                    // 	refundList.push({
+                    // 		RemainingCredit : payment.amount,
+                    // 		CreditNoteNumber : payment.notes,
+                    // 		Type : 'ACCRECCREDIT'
+
+                    // 	});
+
+                    // }
+                });
+
+                deferred.resolve(paymentList);
+            }
+        });
+
+        return deferred.promise;
+    }
+
+    function getPayments(invoices) {
+        //875b9c4e-5715-45b4-a120-bd615397b1fc
+        logger.info('Getting payments');
+        var deferreds = [];
+        _.forEach(invoices, function(invoice) {
+            deferreds.push(getPayment(invoice));
+        });
+
+        return when.all(deferreds)
+            .then(formatPayment);
+    }
+
+
+    function formatPayment(data) {
+        var paymentsList = [];
+        _.forEach(data, function(payment) {
+            paymentsList = paymentsList.concat(payment);
+        });
+
+        return when.all(paymentsList);
+    }
+
     return {
         listInvoices : function (status, page){
             return listInvoices(status, page);
+        },
+
+        getPayments : function (invoices) {
+            return getPayments(invoices);
         }
     }
 
