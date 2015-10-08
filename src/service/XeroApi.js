@@ -4,9 +4,10 @@ var when = require('when');
 var traverse = require('traverse');
 var moment = require('moment');
 
-module.exports = function(Xero, logger) {
+module.exports = function(Xero, Cache, logger) {
     assert(_.isObject(Xero));
     assert(_.isObject(logger));
+    assert(_.isObject(Cache));
 
     var invoiceList = [];
 
@@ -19,11 +20,23 @@ module.exports = function(Xero, logger) {
      */
     function listInvoices(page, filter) {
         assert(_.isNumber(page));
-        assert(_.isString(filter));
 
         var deferred = when.defer();
 
+        // Read json cache file !
+        var cacheXeroInvoices = Cache.get('xero-invoices');
+        if (cacheXeroInvoices) {
+            when(cacheXeroInvoices)
+                .then(JSON.parse)
+                .then(function(cacheXeroInvoices) {
+                    deferred.resolve(cacheXeroInvoices);
+                });
+
+            return deferred.promise;
+        }
+
         Xero.call('GET', '/Invoices/?page=' + page + filter, null, function(err, json) {
+
             if (err) {
                 logger.error(err);
                 deferred.reject({
@@ -32,6 +45,7 @@ module.exports = function(Xero, logger) {
                 });
             } else {
                 if (json.Response.Invoices) {
+                    logger.info('Getting Xero invoices page ' + page);
                     if (_.isArray(json.Response.Invoices.Invoice)) {
                         _.forEach(json.Response.Invoices.Invoice, function(invoice) {
                             invoiceList.push(invoice);
@@ -42,8 +56,85 @@ module.exports = function(Xero, logger) {
 
                     deferred.resolve(listInvoices(page + 1, filter));
                 } else {
+
+                    logger.info('[xero] On met en cache');
+                    Cache.set('xero-invoices', invoiceList);
+
                     deferred.resolve(invoiceList);
                 }
+            }
+        });
+
+        return deferred.promise;
+    }
+
+
+    function callApprouved(invoices) {
+
+        var deferred = when.defer();
+
+        _.forEach(invoices, function (data){
+            logger.debug(data);
+        });
+
+        logger.info('calling api xero for approuved ....')
+        Xero.call('POST', '/Invoices/?SummarizeErrors=false', invoices, function(err, json) {
+            if (err) {
+                logger.error('NOT APPROUVED');
+                deferred.reject(err);
+            } else {
+
+                var InvoicesError = [];
+                when(json.Response)
+                    .then(function(items) {
+
+
+                        traverse(items).forEach(function(item) {
+                            if ('ValidationErrors' == this.key) {
+
+                                    logger.debug(this.parent.node.InvoiceNumber);
+
+
+                                InvoicesError.push(
+                                    {
+                                        invoice: this.parent.node.InvoiceNumber,
+                                        message: this.node.ValidationError.Message
+                                    }
+                                );
+                            }
+                        });
+
+                        var total = _.size(data);
+                        var errors = _.size(InvoicesError);
+                        if (errors) {
+                            logger.error(InvoicesError);
+                        }
+                        logger.info((total - errors) + '/' + total + ' INVOICE(S) UPDATED SUCCESSFUL !');
+
+
+
+
+
+
+
+
+
+
+                        traverse(items).forEach(function(item) {
+                            if ('ValidationErrors' == this.key) {
+                                InvoicesError.push(this.parent.node.InvoiceNumber);
+                            }
+                        });
+
+                        var total = _.size(invoices);
+                        var errors = _.size(InvoicesError);
+                        if (errors) {
+                            logger.error(InvoicesError);
+                        }
+                        logger.info((total - errors) + ' INVOICE(S) APPROUVED DONE !');
+
+                        return deferred.resolve(invoiceList);
+                    });
             }
         });
 
@@ -57,10 +148,9 @@ module.exports = function(Xero, logger) {
      *
      * @returns {string}
      */
-    function formatInvoiceNumberFilter(filters) {
-        assert(_.isObject(filters));
+    function formatInvoiceNumberFilter(status, filters) {
 
-        var queryString = '&where=Status == "DRAFT"';
+        var queryString = '&where=Status == "' + status + '"';
 
         if (filters) {
             var max = 0;
@@ -97,7 +187,10 @@ module.exports = function(Xero, logger) {
 
                 return when.all(_.uniq(invoicesNumber));
             })
-            .then(formatInvoiceNumberFilter)
+            .then(function(filters) {
+                return formatInvoiceNumberFilter('DRAFT', filters);
+
+            })
             .then(function(queryString) {
                 return listInvoices(1, queryString);
             });
@@ -197,12 +290,14 @@ module.exports = function(Xero, logger) {
                     .then(function(items) {
                         traverse(items).forEach(function(item) {
                             if ('ValidationErrors' == this.key) {
-                                InvoicesError.push(
-                                    {
-                                        invoice: this.parent.node.InvoiceNumber,
-                                        message: this.node.ValidationError.Message
-                                    }
-                                );
+                                if (this.parent.node.InvoiceNumber){
+                                    InvoicesError.push(
+                                        {
+                                            invoice: this.parent.node.InvoiceNumber,
+                                            message: this.node.ValidationError.Message
+                                        }
+                                    );
+                                }
                             }
                         });
 
@@ -222,6 +317,14 @@ module.exports = function(Xero, logger) {
     }
 
     return {
+        listDraftInvoices: function() {
+            var status = 'DRAFT';
+            return when.try(formatInvoiceNumberFilter, status, null)
+                .then(function(query) {
+                    return listInvoices(1, query);
+                });
+        },
+
         updateDiscounts: function(csvData) {
             csvData.shift();
 
@@ -234,6 +337,10 @@ module.exports = function(Xero, logger) {
                 .catch(function(err) {
                     logger.error(err);
                 });
+        },
+
+        approuved : function (invoices) {
+            return updateInvoice(invoices);
         }
     }
 };
