@@ -4,7 +4,7 @@ var when = require('when');
 var traverse = require('traverse');
 var moment = require('moment');
 
-module.exports = function (Xero, Cache, logger) {
+module.exports = function(Xero, Cache, logger) {
     assert(_.isObject(Xero));
     assert(_.isObject(logger));
     assert(_.isObject(Cache));
@@ -28,14 +28,14 @@ module.exports = function (Xero, Cache, logger) {
         if (cacheXeroInvoices) {
             when(cacheXeroInvoices)
                 .then(JSON.parse)
-                .then(function (cacheXeroInvoices) {
+                .then(function(cacheXeroInvoices) {
                     deferred.resolve(cacheXeroInvoices);
                 });
 
             return deferred.promise;
         }
 
-        Xero.call('GET', '/Invoices/?page=' + page + filter, null, function (err, json) {
+        Xero.call('GET', '/Invoices/?page=' + page + filter, null, function(err, json) {
 
             if (err) {
                 logger.error(err);
@@ -45,9 +45,8 @@ module.exports = function (Xero, Cache, logger) {
                 });
             } else {
                 if (json.Response.Invoices) {
-                    logger.info('Getting Xero invoices page ' + page);
                     if (_.isArray(json.Response.Invoices.Invoice)) {
-                        _.forEach(json.Response.Invoices.Invoice, function (invoice) {
+                        _.forEach(json.Response.Invoices.Invoice, function(invoice) {
                             invoiceList.push(invoice);
                         });
                     } else {
@@ -82,7 +81,7 @@ module.exports = function (Xero, Cache, logger) {
         if (filters) {
             var max = 0;
             queryString += ' AND (';
-            _.forEach(filters, function (item) {
+            _.forEach(filters, function(item) {
                 if (max <= 50) {
                     queryString += 'InvoiceNumber=="' + item + '" OR ';
                 }
@@ -105,20 +104,20 @@ module.exports = function (Xero, Cache, logger) {
         assert(_.isObject(csvData));
 
         return when(csvData)
-            .then(function (csvData) {
+            .then(function(csvData) {
 
                 var invoicesNumber = [];
-                _.forEach(csvData, function (invoice) {
+                _.forEach(csvData, function(invoice) {
                     invoicesNumber.push(invoice[1]);
                 });
 
                 return when.all(_.uniq(invoicesNumber));
             })
-            .then(function (filters) {
+            .then(function(filters) {
                 return formatInvoiceNumberFilter('DRAFT', filters);
 
             })
-            .then(function (queryString) {
+            .then(function(queryString) {
                 return listInvoices(1, queryString);
             });
     }
@@ -139,11 +138,11 @@ module.exports = function (Xero, Cache, logger) {
         var i = 0;
         var indexItem;
 
-        _.forEach(csvInvoices, function (csvItem) {
+        _.forEach(csvInvoices, function(csvItem) {
             var invoiceNumber = csvItem[1];
             var discountRate = csvItem[11];
 
-            var xeroIndex = _.findIndex(xeroInvoices, function (xeroItem) {
+            var xeroIndex = _.findIndex(xeroInvoices, function(xeroItem) {
                 return xeroItem.InvoiceNumber == invoiceNumber;
             });
 
@@ -203,54 +202,84 @@ module.exports = function (Xero, Cache, logger) {
         var deferred = when.defer();
         logger.info('Calling Xero Invoice POST API ....');
 
-        Xero.call('POST', '/Invoices/?SummarizeErrors=false', data, function (err, json) {
-            if (err) {
-                logger.error(err);
-                deferred.reject({
-                    status: 'KO',
-                    message: err
-                });
-            } else {
-
-                var InvoicesError = [];
-                when(json.Response)
-                    .then(function (items) {
-                        traverse(items).forEach(function (item) {
-                            if ('ValidationErrors' == this.key && this.parent.node.InvoiceNumber) {
-                                InvoicesError.push(
-                                    {
-                                        invoice: this.parent.node.InvoiceNumber,
-                                        message: this.node.ValidationError.Message
-                                    }
-                                );
-                            }
-                        });
-
-                        var total = _.size(data);
-                        var errors = _.size(InvoicesError);
-                        if (errors) {
-                            logger.error(InvoicesError);
-                        }
-                        logger.info((total - errors) + '/' + total + ' INVOICE(S) UPDATED SUCCESSFUL !');
-
-                        return deferred.resolve(data);
+        Xero.call('POST', '/Invoices/?SummarizeErrors=false', data, function(err, json) {
+                if (err) {
+                    logger.error(err);
+                    deferred.reject({
+                        status: 'KO',
+                        message: err
                     });
+                } else {
+
+                    var InvoicesError = [];
+
+                    return when(json.Response)
+                        .then(function(items) {
+
+                            InvoicesError = parseXeroResponse(items.Invoices.Invoice);
+
+                            var total = _.size(data);
+                            var errors = _.size(InvoicesError);
+                            if (errors) {
+                                logger.log('error','Xero Update Invoice Error %j', InvoicesError);
+                            }
+                            logger.log('info', '%s INVOICE(S) UPDATED SUCCESSFUL !', (total - errors) + '/' + total);
+                            //logger.info((total - errors) + '/' + total + ' INVOICE(S) UPDATED SUCCESSFUL !');
+
+                            return deferred.resolve(data);
+                        }
+                    );
+                }
             }
-        });
+        );
 
         return deferred.promise;
+    }
+
+    function parseXeroResponse(response) {
+        return _.filter(_.map(response, function(item) {
+                if (item.ValidationErrors) {
+                    var messages = item.ValidationErrors.ValidationError;
+                    var invoiceNumber = item.InvoiceNumber;
+                    if (item.Invoice) {
+                        invoiceNumber = item.Invoice.InvoiceNumber;
+                    }
+                    return {
+                        invoice: invoiceNumber,
+                        message: messages
+                    }
+                }
+            })
+        );
     }
 
     function updatePayments(data) {
         var deferred = when.defer();
         logger.info('Calling Xero payment API ....');
+
         Xero.call('POST', '/Payments/?SummarizeErrors=false', data, function(err, json) {
             if (err) {
                 logger.error(err);
                 deferred.reject(err);
             } else {
-                logger.info(_.size(data) + ' payments DONE !!!!');
-                deferred.resolve(json);
+
+                var InvoicesError = [];
+                when(json.Response)
+                    .then(function(items) {
+
+                        InvoicesError = parseXeroResponse(items.Payments.Payment);
+
+                        var total = _.size(data);
+                        var errors = _.size(InvoicesError);
+                        if (errors) {
+                            logger.error('Xero Update Payments Error %j', InvoicesError, {});
+                        }
+
+                        logger.log('info', '%s PAYMENT(S) UPDATED SUCCESSFUL !', (total - errors) + '/' + total);
+                        //logger.info((total - errors) + '/' + total + ' PAYMENT(S) UPDATED SUCCESSFUL !');
+
+                        return deferred.resolve(data);
+                    });
             }
         });
 
@@ -260,34 +289,35 @@ module.exports = function (Xero, Cache, logger) {
     }
 
     return {
-        listDraftInvoices: function () {
+        listDraftInvoices: function() {
             var status = 'DRAFT';
             return when.try(formatInvoiceNumberFilter, status, null)
-                .then(function (query) {
+                .then(function(query) {
                     return listInvoices(1, query);
                 });
         },
 
-        updateDiscounts: function (csvData) {
+        updateDiscounts: function(csvData) {
             csvData.shift();
 
             when(csvData)
                 .then(getInvoiceList)
-                .then(function (xeroInvoices) {
+                .then(function(xeroInvoices) {
                     return getItemsRequestBody(xeroInvoices, csvData);
                 })
                 .then(updateInvoice)
-                .catch(function (err) {
+                .catch(function(err) {
                     logger.error(err);
                 });
         },
 
-        approuved: function (invoices) {
+        approuved: function(invoices) {
             return updateInvoice(invoices);
         },
 
-        updatePayments : function (payments) {
+        updatePayments: function(payments) {
             return updatePayments(payments);
         }
     }
-};
+}
+;

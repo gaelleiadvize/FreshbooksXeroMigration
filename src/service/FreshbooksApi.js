@@ -36,14 +36,16 @@ module.exports = function(Freshbooks, Cache, logger) {
                     deferred.resolve(cacheInvoices);
                 });
 
-            return deferred.promise;
+           return deferred.promise;
         }
-
+        logger.info('List freshbook Invoices');
         invoiceApi.list({status: status, per_page: 100, page: page}, function(err, invoices, options) {
-            logger.info('Freshbook invoices page : ' + page);
+
             if (err) {
                 logger.error(err);
             } else {
+
+                logger.info('Freshbook invoices page : ' + page);
                 _.forEach(invoices, function(invoice) {
                     invoiceList.push({
                         id: invoice.invoice_id,
@@ -55,7 +57,7 @@ module.exports = function(Freshbooks, Cache, logger) {
 
                 var nbInvoices = _.size(invoices);
                 if (nbInvoices) {
-                    deferred.resolve(listInvoices(status, page + 1));
+                    listInvoices(status, page + 1);
                 } else {
                     logger.info('[freshbooks] On met en cache');
                     Cache.set('freshbooks-invoices', invoiceList);
@@ -130,14 +132,29 @@ module.exports = function(Freshbooks, Cache, logger) {
 
     function getPayments(invoices) {
         //875b9c4e-5715-45b4-a120-bd615397b1fc
-        logger.info('Getting payments');
+        logger.info('Getting payments for ' + _.size(invoices) + ' invoices');
+
+
+        // Read json cache file !
+        var cachePayments = Cache.get('freshbooks-payments');
+        if (cachePayments) {
+            return when(cachePayments)
+                .then(JSON.parse);
+        }
+
+
+
         var deferreds = [];
         _.forEach(invoices, function(invoice) {
             deferreds.push(getPayment(invoice));
         });
 
         return when.all(deferreds)
-            .then(formatPayment);
+            .then(formatPayment)
+            .then(function (payments){
+                Cache.set('freshbooks-payments', payments);
+                return payments;
+            });
     }
 
 
@@ -156,6 +173,7 @@ module.exports = function(Freshbooks, Cache, logger) {
         },
 
         getPayments : function (invoices) {
+            logger.info('Requestion freshbook for listing payments');
             return getPayments(invoices);
         }
     }
