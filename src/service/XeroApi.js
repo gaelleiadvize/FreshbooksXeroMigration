@@ -19,8 +19,12 @@ module.exports = function(Xero, Cache, logger) {
      * @param string filter Invoices number list
      * @returns {Promise|promise|*|Handler.promise|when.promise|Deferred.promise}
      */
-    function listInvoices(page, filter) {
+    function listInvoices(page, filter, cacheEnabled) {
         assert(_.isNumber(page));
+
+        if(cacheEnabled == undefined){
+            cacheEnabled = true;
+        }
 
         var deferred = when.defer();
 
@@ -28,18 +32,19 @@ module.exports = function(Xero, Cache, logger) {
        // process.exit(1);
 
         // Read json cache file !
-        var cacheXeroInvoices = Cache.get('xero-invoices');
-        //if (cacheXeroInvoices) {
-        //    when(cacheXeroInvoices)
-        //        .then(JSON.parse)
-        //        .then(function(cacheXeroInvoices) {
-        //            deferred.resolve(cacheXeroInvoices);
-        //        });
-        //
-        //    return deferred.promise;
-        //}
+        if (cacheEnabled) {
+            var cacheXeroInvoices = Cache.get('xero-invoices');
+            if (cacheXeroInvoices) {
+                when(cacheXeroInvoices)
+                    .then(JSON.parse)
+                    .then(function(cacheXeroInvoices) {
+                        deferred.resolve(cacheXeroInvoices);
+                    });
+
+                return deferred.promise;
+            }
+        }
         logger.info('Calling Xero list invoices ...');
-        //logger.debug(filter);
         Xero.call('GET', '/Invoices/?page=' + page + filter, null, function(err, json) {
 
             if (err) {
@@ -58,11 +63,13 @@ module.exports = function(Xero, Cache, logger) {
                         invoiceList.push(json.Response.Invoices.Invoice);
                     }
 
-                    deferred.resolve(listInvoices(page + 1, filter));
+                    deferred.resolve(listInvoices(page + 1, filter, cacheEnabled));
                 } else {
 
                     logger.info('[xero] On met en cache [%s]', filter, {});
-                    Cache.set('xero-invoices', invoiceList);
+                    if (cacheEnabled) {
+                        Cache.set('xero-invoices', invoiceList);
+                    }
 
                     deferred.resolve(invoiceList);
                 }
@@ -156,12 +163,24 @@ module.exports = function(Xero, Cache, logger) {
 
             })
             .then(function(queryString) {
+
+                var cacheXeroInvoices = Cache.get('xero-invoices');
+                if (cacheXeroInvoices) {
+                    return when(cacheXeroInvoices)
+                        .then(JSON.parse)
+                        .then(function(cacheXeroInvoices) {
+                            return cacheXeroInvoices;
+                        });
+                }
+
                 var promise = [];
+
                 _.forEach(queryString, function(filter){
-                    promise.push(listInvoices(1, filter));
+                    promise.push(listInvoices(1, filter, false));
                 });
 
                 return when.all(promise).then(function (data){
+                    Cache.set('xero-invoices', invoiceList);
                     return invoiceList;
                 });
             });
@@ -338,7 +357,7 @@ module.exports = function(Xero, Cache, logger) {
             var status = 'DRAFT';
             return when.try(formatInvoiceNumberFilter, status, null)
                 .then(function(query) {
-                    return listInvoices(1, query);
+                    return listInvoices(1, query, true);
                 });
         },
 
