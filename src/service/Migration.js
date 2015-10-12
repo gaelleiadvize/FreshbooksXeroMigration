@@ -60,7 +60,7 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
                         xeroDraftInvoicesNumber.push(invoice.InvoiceNumber);
                     });
 
-                    return FreshbooksApi.listInvoices(type, 33);
+                    return FreshbooksApi.listInvoices(type, 1);
                 })
                 .then(setApprouved)
                 .then(addPayments)
