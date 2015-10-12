@@ -10,6 +10,7 @@ module.exports = function(Xero, Cache, logger) {
     assert(_.isObject(Cache));
 
     var invoiceList = [];
+    var filterList = [];
 
     /**
      * List Xero invoices
@@ -23,18 +24,22 @@ module.exports = function(Xero, Cache, logger) {
 
         var deferred = when.defer();
 
+       // logger.debug(_.size(filterList));
+       // process.exit(1);
+
         // Read json cache file !
         var cacheXeroInvoices = Cache.get('xero-invoices');
-        if (cacheXeroInvoices) {
-            when(cacheXeroInvoices)
-                .then(JSON.parse)
-                .then(function(cacheXeroInvoices) {
-                    deferred.resolve(cacheXeroInvoices);
-                });
-
-            return deferred.promise;
-        }
-
+        //if (cacheXeroInvoices) {
+        //    when(cacheXeroInvoices)
+        //        .then(JSON.parse)
+        //        .then(function(cacheXeroInvoices) {
+        //            deferred.resolve(cacheXeroInvoices);
+        //        });
+        //
+        //    return deferred.promise;
+        //}
+        logger.info('Calling Xero list invoices ...');
+        //logger.debug(filter);
         Xero.call('GET', '/Invoices/?page=' + page + filter, null, function(err, json) {
 
             if (err) {
@@ -56,7 +61,7 @@ module.exports = function(Xero, Cache, logger) {
                     deferred.resolve(listInvoices(page + 1, filter));
                 } else {
 
-                    logger.info('[xero] On met en cache');
+                    logger.info('[xero] On met en cache [%s]', filter, {});
                     Cache.set('xero-invoices', invoiceList);
 
                     deferred.resolve(invoiceList);
@@ -65,6 +70,39 @@ module.exports = function(Xero, Cache, logger) {
         });
 
         return deferred.promise;
+    }
+
+    /**
+     * Format filter (invoice number)
+     *
+     * @param array filters Array of invoices number
+     *
+     * @returns {string}
+     */
+    function formatInvoiceNumberFilterNew(status, filters) {
+
+        var queryString = '&where=Status == "' + status + '"';
+
+        if (filters) {
+            var max = 0;
+            queryString += ' AND (';
+            _.forEach(filters, function(item) {
+                if (max <= 50) {
+                    queryString += 'InvoiceNumber=="' + item + '" OR ';
+                } else {
+                    filterList.push(_.trimRight(queryString, 'OR ') + ')');
+                    max = 0;
+                    queryString = '&where=Status == "' + status + '" AND (';
+                }
+
+                max++;
+            });
+
+            return filterList;
+            return _.trimRight(queryString, 'OR ') + ')';
+        }
+
+        return queryString;
     }
 
     /**
@@ -114,11 +152,18 @@ module.exports = function(Xero, Cache, logger) {
                 return when.all(_.uniq(invoicesNumber));
             })
             .then(function(filters) {
-                return formatInvoiceNumberFilter('DRAFT', filters);
+                return formatInvoiceNumberFilterNew('DRAFT', filters);
 
             })
             .then(function(queryString) {
-                return listInvoices(1, queryString);
+                var promise = [];
+                _.forEach(queryString, function(filter){
+                    promise.push(listInvoices(1, filter));
+                });
+
+                return when.all(promise).then(function (data){
+                    return invoiceList;
+                });
             });
     }
 
@@ -221,9 +266,9 @@ module.exports = function(Xero, Cache, logger) {
                             var total = _.size(data);
                             var errors = _.size(InvoicesError);
                             if (errors) {
-                                logger.log('error','Xero Update Invoice Error %j', InvoicesError);
+                                logger.error('Xero Update Invoice Error %j', InvoicesError, {});
                             }
-                            logger.log('info', '%s INVOICE(S) UPDATED SUCCESSFUL !', (total - errors) + '/' + total);
+                            logger.info('%s INVOICE(S) UPDATED SUCCESSFUL !', (total - errors) + '/' + total, {});
                             //logger.info((total - errors) + '/' + total + ' INVOICE(S) UPDATED SUCCESSFUL !');
 
                             return deferred.resolve(data);
@@ -275,7 +320,7 @@ module.exports = function(Xero, Cache, logger) {
                             logger.error('Xero Update Payments Error %j', InvoicesError, {});
                         }
 
-                        logger.log('info', '%s PAYMENT(S) UPDATED SUCCESSFUL !', (total - errors) + '/' + total);
+                        logger.info('%s PAYMENT(S) UPDATED SUCCESSFUL !', (total - errors) + '/' + total, {});
                         //logger.info((total - errors) + '/' + total + ' PAYMENT(S) UPDATED SUCCESSFUL !');
 
                         return deferred.resolve(data);
