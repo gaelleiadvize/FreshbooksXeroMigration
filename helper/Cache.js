@@ -1,14 +1,16 @@
 'use strict';
 var fs = require("fs");
 var when = require('when');
+var moment = require('moment');
 
 module.exports = function(scope, logger) {
     assert(_.isObject(logger));
 
     var path = './cache/';
+    var now = moment().format('YYYYMMDD');
 
     function formatKey(key) {
-        return key + '-' + scope;
+        return key + '-' + scope + '-'+ now;
     }
 
     function exists(filename) {
