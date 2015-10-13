@@ -33,7 +33,7 @@ module.exports = function(Xero, Cache, logger) {
     function listInvoices(page, filter, cacheEnabled) {
         assert(_.isNumber(page));
 
-        if(cacheEnabled == undefined){
+        if (cacheEnabled == undefined) {
             cacheEnabled = true;
         }
 
@@ -175,18 +175,16 @@ module.exports = function(Xero, Cache, logger) {
                 }
                 var promise = [];
 
-                _.forEach(queryString, function(filter){
+                _.forEach(queryString, function(filter) {
                     promise.push(listInvoices(1, filter, false));
                 });
 
-                return when.all(promise).then(function (data){
+                return when.all(promise).then(function(data) {
                     Cache.set('xero-invoices', invoiceList);
                     return invoiceList;
                 });
             });
     }
-
-
 
     /**
      * Get items request body
@@ -267,6 +265,15 @@ module.exports = function(Xero, Cache, logger) {
 
         var deferred = when.defer();
         logger.info('Calling Xero Invoice POST API ....');
+
+        if (_.size(data) == 0) {
+            deferred.reject({
+                status: 'KO',
+                message: 'No data to update invoice'
+            });
+
+            return deferred.promise;
+        }
 
         Xero.call('POST', '/Invoices/?SummarizeErrors=false', data, function(err, json) {
                 if (err) {
@@ -373,7 +380,7 @@ module.exports = function(Xero, Cache, logger) {
                 })
                 .then(updateInvoice)
                 .catch(function(err) {
-                    logger.error(err);
+                    logger.error('Update discount error : %j', err, {});
                 });
         },
 
@@ -385,8 +392,8 @@ module.exports = function(Xero, Cache, logger) {
             return updatePayments(payments);
         },
 
-        updateTaxe : function (data) {
-           return updateInvoice(data);
+        updateTaxe: function(data) {
+            return updateInvoice(data);
         }
     }
 }

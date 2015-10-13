@@ -18,7 +18,6 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
     taxAssoc['TAX015'] = 'TAX017';
     taxAssoc['TAX001'] = 'TAX011';
 
-
     /**
      * Set invoices approuved
      *
@@ -80,18 +79,18 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
                 });
         },
 
-        creditNoteMigration: function (type) {
+        creditNoteMigration: function(type) {
 
         },
 
-        updateTaxeRate: function () {
+        updateTaxeRate: function() {
             XeroApi.listDraftInvoices()
-                .then(function (invoices){
+                .then(function(invoices) {
                     var taxeRate = config.xero.taxe.split(",");
                     var tmpRate = [];
                     var XeroProductData = [];
                     var XeroPostData = []
-                    _.forEach(invoices, function (invoice) {
+                    _.forEach(invoices, function(invoice) {
                         var items = [];
 
                         var productItem = invoice.LineItems.LineItem;
@@ -101,48 +100,47 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
                             items.push(invoice.LineItems.LineItem);
                         }
                         XeroProductData = [];
-                        _.forEach(items, function (item) {
+                        _.forEach(items, function(item) {
 
                             if (item.TaxType) {
                                 var tmp = _.includes(taxeRate, item.TaxType);
+                                var taxType = item.TaxType;
                                 if (!tmp) {
-                                    if (!_.includes(tmpRate, item.TaxType)) {
-                                        tmpRate.push(item.TaxType);
-
-                                       // logger.debug(invoice.InvoiceNumber + ' : ' + item.TaxType + ' ' + tmp);
-                                    }
-                                    XeroProductData.push({
-                                        LineItemID: item.LineItemID,
-                                        Description: item.Description,
-                                        TaxType: taxAssoc[item.TaxType]
-                                    });
-
-
-
-                                } else {
-                                    XeroProductData.push({
-                                        LineItemID: item.LineItemID,
-                                        Description: item.Description,
-                                        TaxType: item.TaxType
-                                    });
+                                    taxType = taxAssoc[item.TaxType];
                                 }
+
+                                var product = {
+                                    LineItemID: item.LineItemID,
+                                    Description: item.Description,
+                                    TaxType: taxType,
+                                    UnitAmount: item.UnitAmount,
+                                    TaxAmount: item.TaxAmount,
+                                    Quantity: item.Quantity,
+
+                                }
+                                if (item.DiscountRate) {
+                                    product.DiscountRate = item.DiscountRate;
+                                }
+
+                                XeroProductData.push(product);
                             }
                         })
                         if (!_.isEmpty(XeroProductData)) {
-                            if (invoice.InvoiceNumber == 'AQ095') {
-                                logger.debug(XeroProductData);
-                            }
+                            // if (invoice.InvoiceNumber == 'AQ095') {
+                            logger.debug(XeroProductData);
+
                             XeroPostData.push({
                                 InvoiceNumber: invoice.InvoiceNumber,
                                 LineItems: XeroProductData
                             });
+                            // }
                         }
 
                     });
                     return when.all(XeroPostData);
                 })
-                .then(function (data) {
-                   XeroApi.updateTaxe(data);
+                .then(function(data) {
+                    XeroApi.updateTaxe(data);
                 })
 
         }
