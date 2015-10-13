@@ -8,7 +8,7 @@ var when = require('when');
 
 var FreshBooks = require("./helper/freshbooks")(config.freshbooks, logger);
 var Xero = require("./helper/xero")(config.xero, logger);
-var Cache = require("./helper/cache")('paid', logger);
+var Cache = require("./helper/cache")('taxe', logger);
 
 
 var FreshbooksApi = require('./src/service/FreshbooksApi')(FreshBooks, Cache, logger);
@@ -17,4 +17,7 @@ var XeroApi = require('./src/service/XeroApi')(Xero, Cache, logger);
 
 var Migration = require('./src/service/Migration')(FreshbooksApi, XeroApi, logger);
 
-Migration.paymentMigration('paid', 1);
+Migration.updateTaxeRate('paid', 1);
+
+
+

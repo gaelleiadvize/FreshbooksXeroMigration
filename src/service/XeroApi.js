@@ -12,6 +12,17 @@ module.exports = function(Xero, Cache, logger) {
     var invoiceList = [];
     var filterList = [];
 
+    var taxeRateAssoc = [
+        ['TAX009', 'TAX005'],
+        ['TAX004', 'TAX011'],
+        ['TAX003', 'TAX008'],
+        ['TAX008', 'TAX007'],
+        ['TAX006', 'TAX019'],
+        ['TAX005', 'TAX018'],
+        ['TAX011', 'TAX017'],
+        ['TAX007', 'TAX020']
+    ];
+
     /**
      * List Xero invoices
      *
@@ -28,22 +39,16 @@ module.exports = function(Xero, Cache, logger) {
 
         var deferred = when.defer();
 
-       // logger.debug(_.size(filterList));
-       // process.exit(1);
-
         // Read json cache file !
         if (cacheEnabled) {
             var cacheXeroInvoices = Cache.get('xero-invoices');
             if (cacheXeroInvoices) {
-                when(cacheXeroInvoices)
-                    .then(JSON.parse)
-                    .then(function(cacheXeroInvoices) {
-                        deferred.resolve(cacheXeroInvoices);
-                    });
+                deferred.resolve(cacheXeroInvoices);
 
                 return deferred.promise;
             }
         }
+
         logger.info('Calling Xero list invoices ...');
         Xero.call('GET', '/Invoices/?page=' + page + filter, null, function(err, json) {
 
@@ -163,16 +168,11 @@ module.exports = function(Xero, Cache, logger) {
 
             })
             .then(function(queryString) {
+                var cacheXeroInvoice = Cache.get('xero-invoices');
 
-                var cacheXeroInvoices = Cache.get('xero-invoices');
-                if (cacheXeroInvoices) {
-                    return when(cacheXeroInvoices)
-                        .then(JSON.parse)
-                        .then(function(cacheXeroInvoices) {
-                            return cacheXeroInvoices;
-                        });
+                if (cacheXeroInvoice) {
+                    return cacheXeroInvoice;
                 }
-
                 var promise = [];
 
                 _.forEach(queryString, function(filter){
@@ -185,6 +185,8 @@ module.exports = function(Xero, Cache, logger) {
                 });
             });
     }
+
+
 
     /**
      * Get items request body
@@ -204,7 +206,7 @@ module.exports = function(Xero, Cache, logger) {
 
         _.forEach(csvInvoices, function(csvItem) {
             var invoiceNumber = csvItem[1];
-            var discountRate = csvItem[11];
+            var discountRate = csvItem[11].replace(',', '.');
 
             var xeroIndex = _.findIndex(xeroInvoices, function(xeroItem) {
                 return xeroItem.InvoiceNumber == invoiceNumber;
@@ -381,6 +383,10 @@ module.exports = function(Xero, Cache, logger) {
 
         updatePayments: function(payments) {
             return updatePayments(payments);
+        },
+
+        updateTaxe : function (data) {
+           return updateInvoice(data);
         }
     }
 }

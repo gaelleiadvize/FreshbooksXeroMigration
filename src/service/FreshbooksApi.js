@@ -11,7 +11,6 @@ module.exports = function(Freshbooks, Cache, logger) {
     var invoiceApi = new Freshbooks.Invoice;
     var paymentApi = new Freshbooks.Payment;
 
-
     var invoiceList = [];
 
     /**
@@ -30,13 +29,9 @@ module.exports = function(Freshbooks, Cache, logger) {
         // Read json cache file !
         var cacheInvoices = Cache.get('freshbooks-invoices');
         if (cacheInvoices) {
-            when(cacheInvoices)
-                .then(JSON.parse)
-                .then(function(cacheInvoices) {
-                    deferred.resolve(cacheInvoices);
-                });
+            deferred.resolve(cacheInvoices);
 
-           return deferred.promise;
+            return deferred.promise;
         }
         logger.info('List freshbook Invoices');
         invoiceApi.list({status: status, per_page: 100, page: page}, function(err, invoices, options) {
@@ -79,7 +74,6 @@ module.exports = function(Freshbooks, Cache, logger) {
             } else {
 
                 var paymentList = [];
-                var refundList = [];
 
                 _.forEach(payments, function(payment) {
 
@@ -134,15 +128,11 @@ module.exports = function(Freshbooks, Cache, logger) {
         //875b9c4e-5715-45b4-a120-bd615397b1fc
         logger.info('Getting payments for ' + _.size(invoices) + ' invoices');
 
-
         // Read json cache file !
         var cachePayments = Cache.get('freshbooks-payments');
         if (cachePayments) {
-            return when(cachePayments)
-                .then(JSON.parse);
+            return cachePayments;
         }
-
-
 
         var deferreds = [];
         _.forEach(invoices, function(invoice) {
@@ -151,12 +141,11 @@ module.exports = function(Freshbooks, Cache, logger) {
 
         return when.all(deferreds)
             .then(formatPayment)
-            .then(function (payments){
+            .then(function(payments) {
                 Cache.set('freshbooks-payments', payments);
                 return payments;
             });
     }
-
 
     function formatPayment(data) {
         var paymentsList = [];
@@ -168,16 +157,14 @@ module.exports = function(Freshbooks, Cache, logger) {
     }
 
     return {
-        listInvoices : function (status, page){
+        listInvoices: function(status, page) {
             return listInvoices(status, page);
         },
 
-        getPayments : function (invoices) {
+        getPayments: function(invoices) {
             logger.info('Requestion freshbook for listing payments');
             return getPayments(invoices);
         }
     }
-
-
 
 }
