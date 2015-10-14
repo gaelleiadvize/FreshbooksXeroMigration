@@ -67,6 +67,7 @@ module.exports = function(Freshbooks, Cache, logger) {
 
     function getPayment(invoice) {
         var deferred = when.defer();
+        logger.info('Calling Freshbook Payment GET API for Invoice %s ', invoice.number, {});
 
         paymentApi.list({invoice_id: invoice.id}, function(err, payments, options) {
             if (err) {
