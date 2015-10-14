@@ -38,7 +38,23 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
             return false;
         })
             .then(_.filter)
-            .then(XeroApi.approuved)
+            .then(function (invoices) {
+                return invoices;
+                //return XeroApi.approuved(invoices);
+                var postData = _.chunk(invoices, 20);
+                var promise = [];
+                //promise.push(XeroApi.approuved(postData[0]));
+                //promise.push(XeroApi.approuved(postData[1]));
+                //promise.push(XeroApi.approuved(postData[2]));
+                _.forEach(postData, function (post){
+                    promise.push(XeroApi.approuved(post));
+                });
+
+                return when.all(promise).then(function (data){
+                    logger.info('Approuved ok !!');
+                    return invoices;
+                });
+            })
             .then(function(data) {
                 logger.info('Approuved done !');
                 return when.all(invoices);
@@ -54,7 +70,21 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
 
         return when(invoices)
             .then(FreshbooksApi.getPayments)
-            .then(XeroApi.updatePayments);
+            .then(function (payments){
+                var postData = _.chunk(payments, 100);
+                var promise = [];
+                //promise.push(XeroApi.approuved(postData[0]));
+                //promise.push(XeroApi.approuved(postData[1]));
+                //promise.push(XeroApi.approuved(postData[2]));
+                _.forEach(postData, function (post){
+                    promise.push(XeroApi.updatePayments(post));
+                });
+
+                return when.all(promise).then(function (data){
+                    logger.info('payments added  !!');
+                    return payments;
+                });
+            });
     }
 
     return {
@@ -140,7 +170,11 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
                     return when.all(XeroPostData);
                 })
                 .then(function(data) {
-                    XeroApi.updateTaxe(data);
+                    var postData = _.chunk(data, 500);
+                    _.forEach(postData, function (post) {
+                        XeroApi.updateTaxe(post);
+                    });
+
                 })
 
         }
