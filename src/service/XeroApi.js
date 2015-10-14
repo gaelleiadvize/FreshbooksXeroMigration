@@ -264,9 +264,10 @@ module.exports = function(Xero, Cache, logger) {
     function updateInvoice(data) {
 
         var deferred = when.defer();
-        logger.info('Calling Xero Invoice POST API ....');
+        logger.info('Calling Xero Invoice POST API for %s invoice(s)', _.size(data), {});
 
         if (_.size(data) == 0) {
+
             deferred.reject({
                 status: 'KO',
                 message: 'No data to update invoice'
@@ -276,6 +277,7 @@ module.exports = function(Xero, Cache, logger) {
         }
 
         Xero.call('POST', '/Invoices/?SummarizeErrors=false', data, function(err, json) {
+
                 if (err) {
                     logger.error(err);
                     deferred.reject({
@@ -328,7 +330,8 @@ module.exports = function(Xero, Cache, logger) {
 
     function updatePayments(data) {
         var deferred = when.defer();
-        logger.info('Calling Xero payment API ....');
+
+        logger.info('Calling Xero Payment POST API for %s payments(s)', _.size(data), {});
 
         Xero.call('POST', '/Payments/?SummarizeErrors=false', data, function(err, json) {
             if (err) {
