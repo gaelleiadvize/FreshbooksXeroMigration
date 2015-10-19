@@ -30,6 +30,10 @@ module.exports = function(logger) {
             taxe: {
                 $default: 'taxe',
                 $aliases: ['SALES_XERO_INVOICING_TAXE_RATE']
+            },
+            account: {
+                $default: 'accountID',
+                $aliases: ['SALES_XERO_ACCOUNT_ID']
             }
         }
     });

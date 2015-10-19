@@ -39,7 +39,7 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
         })
             .then(_.filter)
             .then(function (invoices) {
-                return invoices;
+                //return invoices;
                 //return XeroApi.approuved(invoices);
                 var postData = _.chunk(invoices, 20);
                 var promise = [];
@@ -80,17 +80,17 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
                     promise.push(XeroApi.updatePayments(post));
                 });
 
-                return when.all(promise).then(function (data){
-                    logger.info('payments added  !!');
-                    return payments;
-                });
+                return when.all(promise);
+            })
+            .then(function (data){
+                return payments;
             });
     }
 
     return {
 
         paymentMigration: function(type) {
-
+            logger.debug(config.xero.account);
             XeroApi.listDraftInvoices()
                 .then(function(draftInvoices) {
                     _.forEach(draftInvoices, function(invoice) {
@@ -113,6 +113,9 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
 
         },
 
+        /**
+         * Update VAT with taxType active (failed on init import)
+         */
         updateTaxeRate: function() {
             XeroApi.listDraftInvoices()
                 .then(function(invoices) {
@@ -132,45 +135,46 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
                         XeroProductData = [];
                         _.forEach(items, function(item) {
 
+                            var product = {
+                                LineItemID: item.LineItemID,
+                                Description: item.Description,
+                                UnitAmount: item.UnitAmount,
+                                TaxAmount: item.TaxAmount,
+                                Quantity: item.Quantity
+                            };
+
+                            if (item.DiscountRate) {
+                                product.DiscountRate = item.DiscountRate;
+                            }
+
                             if (item.TaxType) {
                                 var tmp = _.includes(taxeRate, item.TaxType);
                                 var taxType = item.TaxType;
                                 if (!tmp) {
                                     taxType = taxAssoc[item.TaxType];
                                 }
+                                product.TaxType = taxType;
+                             }
 
-                                var product = {
-                                    LineItemID: item.LineItemID,
-                                    Description: item.Description,
-                                    TaxType: taxType,
-                                    UnitAmount: item.UnitAmount,
-                                    TaxAmount: item.TaxAmount,
-                                    Quantity: item.Quantity,
+                            XeroProductData.push(product);
+                        });
 
-                                }
-                                if (item.DiscountRate) {
-                                    product.DiscountRate = item.DiscountRate;
-                                }
-
-                                XeroProductData.push(product);
-                            }
-                        })
                         if (!_.isEmpty(XeroProductData)) {
-                            // if (invoice.InvoiceNumber == 'AQ095') {
-                            logger.debug(XeroProductData);
+                            //if (invoice.InvoiceNumber == 'AQ488') {
+                            //logger.debug(XeroProductData);
 
                             XeroPostData.push({
                                 InvoiceNumber: invoice.InvoiceNumber,
                                 LineItems: XeroProductData
                             });
-                            // }
+                           //  }
                         }
 
                     });
                     return when.all(XeroPostData);
                 })
                 .then(function(data) {
-                    var postData = _.chunk(data, 500);
+                    var postData = _.chunk(data, 20);
                     _.forEach(postData, function (post) {
                         XeroApi.updateTaxe(post);
                     });

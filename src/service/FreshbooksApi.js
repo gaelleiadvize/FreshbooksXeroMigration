@@ -4,12 +4,15 @@ var when = require('when');
 var traverse = require('traverse');
 var moment = require('moment');
 
+
 module.exports = function(Freshbooks, Cache, logger) {
     assert(_.isObject(Freshbooks));
     assert(_.isObject(logger));
 
     var invoiceApi = new Freshbooks.Invoice;
     var paymentApi = new Freshbooks.Payment;
+
+    var config = require('../../config/config')(logger);
 
     var invoiceList = [];
 
@@ -84,7 +87,7 @@ module.exports = function(Freshbooks, Cache, logger) {
                         },
                         Amount: payment.amount,
                         Account: {
-                            AccountID: '5c0bcc56-99a1-464d-ac45-defe718131ee'
+                            AccountID: config.xero.account
                         },
                         Date: moment(payment.date).format('YYYY-MM-DD'),
                         Reference: payment.type + ' - ' + payment.notes
