@@ -10,6 +10,7 @@ module.exports = function(Xero, Cache, logger) {
     assert(_.isObject(Cache));
 
     var invoiceList = [];
+    var creditNoteList = [];
     var filterList = [];
 
     var taxeRateAssoc = [
@@ -142,6 +143,74 @@ module.exports = function(Xero, Cache, logger) {
         }
 
         return queryString;
+    }
+
+    /**
+     * List Xero Credit Notes
+     *
+     * @param integer page current page
+     * @param string filter Invoices number list
+     * @returns {Promise|promise|*|Handler.promise|when.promise|Deferred.promise}
+     */
+    function listCreditNotes(filter, cacheEnabled) {
+
+        if (cacheEnabled == undefined) {
+            cacheEnabled = true;
+        }
+
+        var deferred = when.defer();
+
+        // Read json cache file !
+        if (cacheEnabled) {
+            var cacheXeroInvoices = Cache.get('xero-creditnotes');
+            if (cacheXeroInvoices) {
+               // deferred.resolve(cacheXeroInvoices);
+
+                //return deferred.promise;
+            }
+        }
+
+        logger.info('Calling Xero list credit notes ...');
+        Xero.call('GET', '/CreditNotes/?' + filter, null, function(err, json) {
+            logger.info('query  ' + '/CreditNotes/?page=1' + filter);
+            if (err) {
+                logger.error(err);
+                deferred.reject({
+                    status: 'KO',
+                    message: err
+                });
+            } else {
+                if (json.Response.CreditNotes) {
+                    if (_.isArray(json.Response.CreditNotes.CreditNote)) {
+                        _.forEach(json.Response.CreditNotes.CreditNote, function(creditNote) {
+                            creditNoteList.push(creditNote);
+                        });
+                    } else {
+                        creditNoteList.push(json.Response.CreditNotes.CreditNote);
+                    }
+
+
+                    logger.info('[xero] On met en cache [%s]', filter, {});
+                    if (cacheEnabled) {
+                        Cache.set('xero-creditnotes', creditNoteList);
+                    }
+
+                    deferred.resolve(creditNoteList);
+                }
+            }
+        });
+
+        return deferred.promise;
+    }
+
+    function createQuery(status){
+        var queryString = '&where=CreditNoteNumber.StartsWith("AF") AND (';
+
+        _.forEach(status, function(item) {
+            queryString += 'Status=="' + item + '" OR ';
+        });
+
+        return _.trimRight(queryString, 'OR ') + ')';
     }
 
     /**
@@ -370,6 +439,14 @@ module.exports = function(Xero, Cache, logger) {
             return when.try(formatInvoiceNumberFilter, status, null)
                 .then(function(query) {
                     return listInvoices(1, query, true);
+                });
+        },
+
+        listCredits: function(status, filters) {
+            return when.try(createQuery, status, null)
+                .then(function(query) {
+
+                    return listCreditNotes(query, true);
                 });
         },
 

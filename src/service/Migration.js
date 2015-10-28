@@ -12,6 +12,7 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
     var config = require('../../config/config')(logger);
 
     var xeroDraftInvoicesNumber = [];
+    var xeroCreditNotesNumber = [];
 
     var taxAssoc = [];
     taxAssoc['TAX002'] = 'TAX003';
@@ -90,7 +91,6 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
     return {
 
         paymentMigration: function(type) {
-            logger.debug(config.xero.account);
             XeroApi.listDraftInvoices()
                 .then(function(draftInvoices) {
                     _.forEach(draftInvoices, function(invoice) {
@@ -110,7 +110,14 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
         },
 
         creditNoteMigration: function(type) {
+            XeroApi.listCredits(['DRAFT', 'AUTHORISED'], '')
+                .then(function(creditNotes) {
+                    _.forEach(creditNotes, function(creditNote) {
+                        xeroCreditNotesNumber.push(creditNote.CreditNoteNumber);
+                    });
 
+                    return FreshbooksApi.listCreditNotes(type, 1);
+                })
         },
 
         /**
