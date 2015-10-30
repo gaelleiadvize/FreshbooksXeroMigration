@@ -22,4 +22,4 @@ var Migration = require('./src/service/Migration')(FreshbooksApi, XeroApi, logge
 
 
 //FreshbooksInvoices.paymentMigration('paid', 1);
-Migration.paymentMigration('partial', 1);
+Migration.paymentCheck('partial', 1);

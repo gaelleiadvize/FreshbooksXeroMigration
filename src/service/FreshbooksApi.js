@@ -4,7 +4,6 @@ var when = require('when');
 var traverse = require('traverse');
 var moment = require('moment');
 
-
 module.exports = function(Freshbooks, Cache, logger) {
     assert(_.isObject(Freshbooks));
     assert(_.isObject(logger));
@@ -45,12 +44,16 @@ module.exports = function(Freshbooks, Cache, logger) {
 
                 logger.info('Freshbook invoices page : ' + page);
                 _.forEach(invoices, function(invoice) {
-                    invoiceList.push({
-                        id: invoice.invoice_id,
-                        number: invoice.number,
-                        amount: invoice.amount,
-                        contact: invoice.organization
-                    });
+
+                    //if (invoice.number == 'AQ699') {
+                        logger.debug(invoice.number);
+                        invoiceList.push({
+                            id: invoice.invoice_id,
+                            number: invoice.number,
+                            amount: invoice.amount,
+                            contact: invoice.organization
+                        });
+                    //}
                 });
 
                 var nbInvoices = _.size(invoices);
@@ -94,31 +97,6 @@ module.exports = function(Freshbooks, Cache, logger) {
                     }
 
                     paymentList.push(paid);
-
-                    // if (payment.type == 'Credit') {
-
-                    // 	var paid = {
-                    // 		CreditNote : {
-                    // 			CreditNoteNumber : payment.notes
-                    // 		},
-                    // 		Amount : payment.amount,
-                    // 		Account : {
-                    // 			AccountID : '5c0bcc56-99a1-464d-ac45-defe718131ee'
-                    // 		},
-                    // 		Date : moment(payment.date).format('YYYY-MM-DD'),
-                    // 		Reference : payment.type + ' - ' + payment.notes
-                    // 	}
-
-                    // 	paymentList.push(paid);
-
-                    // 	refundList.push({
-                    // 		RemainingCredit : payment.amount,
-                    // 		CreditNoteNumber : payment.notes,
-                    // 		Type : 'ACCRECCREDIT'
-
-                    // 	});
-
-                    // }
                 });
 
                 deferred.resolve(paymentList);
