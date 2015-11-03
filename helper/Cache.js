@@ -3,14 +3,14 @@ var fs = require("fs");
 var when = require('when');
 var moment = require('moment');
 
-module.exports = function(scope, logger) {
+module.exports = function(scope, logger, config) {
     assert(_.isObject(logger));
 
     var path = './cache/';
     var now = moment().format('YYYYMMDD');
 
     function formatKey(key) {
-        return key + '-' + scope + '-'+ now;
+        return key + '-' + scope + '-'+ now +'-'+ config.env;
     }
 
     function exists(filename) {
