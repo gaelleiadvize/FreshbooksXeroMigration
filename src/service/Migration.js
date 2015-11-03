@@ -40,13 +40,9 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
         })
             .then(_.filter)
             .then(function (invoices) {
-                //return invoices;
-                //return XeroApi.approuved(invoices);
+
                 var postData = _.chunk(invoices, 20);
                 var promise = [];
-                //promise.push(XeroApi.approuved(postData[0]));
-                //promise.push(XeroApi.approuved(postData[1]));
-                //promise.push(XeroApi.approuved(postData[2]));
                 _.forEach(postData, function (post){
                     promise.push(XeroApi.approuved(post));
                 });
@@ -75,25 +71,17 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
                 //logger.debug(payments);
                 var partialPayments = [];
                 _.forEach(payments, function (payment){
-                    logger.debug(payment.Invoice.InvoiceNumber);
                     partialPayments.push(payment.Invoice.InvoiceNumber);
                    // partialPayments[payment.Invoice.InvoiceNumber]++;
 
                 });
-                 logger.debug(partialPayments);
-
-                return when.all(partialPayments);
-                var postData = _.chunk(payments, 100);
-                var promise = [];
-                _.forEach(postData, function (post){
-                   // promise.push(XeroApi.updatePayments(post));
-                });
-
-                return when.all(promise);
+                return _.countBy(partialPayments, _.identity);
             })
-            .then(function (data){
-               // logger.debug(data);
-                return payments;
+            .then(function (fbInvoices){
+                logger.debug(fbInvoices);
+                _.foreach(fbInvoices, function (invoice){
+
+                });
             });
     }
 
@@ -123,8 +111,6 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
 
     function addRefunds(creditNotes)
     {
-        logger.debug(_.size(creditNotes));
-
         return when(creditNotes)
             .then(function (creditNotes) {
 
@@ -151,9 +137,20 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
     }
 
     return {
+        /**
+         * Check partials payments
+         *
+         * @param type
+         */
+        paymentCheck: function(type, status) {
+            var XeroInvoices;
 
-        paymentCheck: function(type) {
-            XeroApi.listAuthorisedInvoices()
+            if (status == 'DRAFT') {
+                XeroInvoices = XeroApi.listDraftInvoices();
+            } else {
+                XeroInvoices = XeroApi.listAuthorisedInvoices();
+            }
+            when(XeroInvoices)
                 .then(function(Invoices) {
                     _.forEach(Invoices, function(invoice) {
 
@@ -179,15 +176,21 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
                     _.forEach(data, function (invoice){
                       // logger.debug(invoice);
                     });
-                    logger.info('Migration paiement done !');
+
                 })
                 .catch(function(err) {
                     //logger.error(err);
                 });
         },
 
-        paymentMigration: function(type) {
-            XeroApi.listAuthorisedInvoices()
+        paymentMigration: function(type, status) {
+            var XeroInvoices;
+            if (status == 'DRAFT') {
+                XeroInvoices = XeroApi.listDraftInvoices();
+            } else {
+                XeroInvoices = XeroApi.listAuthorisedInvoices();
+            }
+            return when(XeroInvoices)
                 .then(function(Invoices) {
                     _.forEach(Invoices, function(invoice) {
                         xeroDraftInvoicesNumber.push(invoice.InvoiceNumber);
@@ -200,13 +203,13 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
                         var isDraftInXero = _.includes(xeroDraftInvoicesNumber, invoice.number);
 
                         if (isDraftInXero) {
-
                             return invoice;
                         }
                         return false;
                     })
                         .then(_.filter);
                 })
+                //.then(setApprouved)
                 .then(addPayments)
                 .then(function(data) {
                     logger.info('Migration paiement done !');

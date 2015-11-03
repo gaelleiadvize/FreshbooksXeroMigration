@@ -13,17 +13,6 @@ module.exports = function(Xero, Cache, logger) {
     var creditNoteList = [];
     var filterList = [];
 
-    var taxeRateAssoc = [
-        ['TAX009', 'TAX005'],
-        ['TAX004', 'TAX011'],
-        ['TAX003', 'TAX008'],
-        ['TAX008', 'TAX007'],
-        ['TAX006', 'TAX019'],
-        ['TAX005', 'TAX018'],
-        ['TAX011', 'TAX017'],
-        ['TAX007', 'TAX020']
-    ];
-
     /**
      * List Xero invoices
      *
@@ -164,9 +153,9 @@ module.exports = function(Xero, Cache, logger) {
         if (cacheEnabled) {
             var cacheXeroInvoices = Cache.get('xero-creditnotes');
             if (cacheXeroInvoices) {
-               // deferred.resolve(cacheXeroInvoices);
+                deferred.resolve(cacheXeroInvoices);
 
-                //return deferred.promise;
+                return deferred.promise;
             }
         }
 
@@ -189,7 +178,6 @@ module.exports = function(Xero, Cache, logger) {
                         creditNoteList.push(json.Response.CreditNotes.CreditNote);
                     }
 
-
                     logger.info('[xero] On met en cache [%s]', filter, {});
                     if (cacheEnabled) {
                         Cache.set('xero-creditnotes', creditNoteList);
@@ -203,7 +191,7 @@ module.exports = function(Xero, Cache, logger) {
         return deferred.promise;
     }
 
-    function createQuery(status){
+    function createQuery(status) {
         var queryString = '&where=CreditNoteNumber.StartsWith("AF") AND (';
 
         _.forEach(status, function(item) {
@@ -360,6 +348,8 @@ module.exports = function(Xero, Cache, logger) {
                     return when(json.Response)
                         .then(function(items) {
 
+                            //logger.debug(JSON.stringify(items))
+
                             InvoicesError = parseXeroResponse(items.Invoices.Invoice);
 
                             var total = _.size(data);
@@ -442,12 +432,17 @@ module.exports = function(Xero, Cache, logger) {
                 });
         },
 
+        listAuthorisedInvoices: function() {
+            var status = 'AUTHORISED';
+            return when.try(formatInvoiceNumberFilter, status, null)
+                .then(function(query) {
+                    return listInvoices(1, query, true);
+                });
+        },
+
         listCredits: function(status, filters) {
             return when.try(createQuery, status, null)
-                .then(function(query) {
-
-                    return listCreditNotes(query, true);
-                });
+                .then(listCreditNotes);
         },
 
         updateDiscounts: function(csvData) {
@@ -460,7 +455,7 @@ module.exports = function(Xero, Cache, logger) {
                 })
                 .then(updateInvoice)
                 .catch(function(err) {
-                    logger.error('Update discount error : %j', err, {});
+                   // logger.error('Update discount error : %j', err, {});
                 });
         },
 
