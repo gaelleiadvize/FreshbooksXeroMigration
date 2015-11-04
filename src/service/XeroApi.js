@@ -41,9 +41,9 @@ module.exports = function(Xero, Cache, logger) {
 
         logger.info('Calling Xero list invoices ...');
 
-        //Xero.call('GET', '/Invoices/?page=' + page + filter + ' AND InvoiceNumber="AR603"', null, function(err, json) {
+        //Xero.call('GET', '/Invoices/?page=' + page + filter + ' AND InvoiceNumber="AR1493"', null, function(err, json) {
         Xero.call('GET', '/Invoices/?page=' + page + filter, null, function(err, json) {
-            //logger.debug('/Invoices/?page=' + page + filter + ' AND InvoiceNumber="AR787"');
+            //logger.debug('/Invoices/?page=' + page + filter + ' AND InvoiceNumber="AR1493"');
             if (err) {
                 logger.error(err);
                 deferred.reject({
