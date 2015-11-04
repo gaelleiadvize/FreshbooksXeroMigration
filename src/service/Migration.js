@@ -209,9 +209,10 @@ module.exports = function(FreshbooksApi, XeroApi, logger) {
                     })
                         .then(_.filter);
                 })
-                //.then(setApprouved)
+               // .then(setApprouved)
                 .then(addPayments)
                 .then(function(data) {
+                    logger.debug(data);
                     logger.info('Migration paiement done !');
                 })
                 .catch(function(err) {
