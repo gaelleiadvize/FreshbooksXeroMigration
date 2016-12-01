@@ -19,11 +19,10 @@ module.exports = function(scope, logger, config) {
 
         var content = '';
         var filepath = path + filename + '.json';
-
+        logger.info(filepath);
         try {
             content = fs.readFileSync(filepath);
-
-            return content;
+            return JSON.parse(content);
         } catch (err) {
             logger.info(filename + ' has no cache');
         }
@@ -60,8 +59,7 @@ module.exports = function(scope, logger, config) {
             var cache =exists(filename);
 
             if (cache) {
-                return when(cache)
-                    .then(JSON.parse);
+                return cache;
             }
             return false;
         }

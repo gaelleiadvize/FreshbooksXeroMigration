@@ -11,7 +11,9 @@ module.exports = function(Xero, Cache, logger) {
 
     var invoiceList = [];
     var creditNoteList = [];
-    var filterList = [];
+    var filterList = []
+
+    var config = require('../../config/config')(logger);
 
     /**
      * List Xero invoices
@@ -51,6 +53,8 @@ module.exports = function(Xero, Cache, logger) {
                     message: err
                 });
             } else {
+                logger.info('/Invoices/?page=' + page + filter);
+
                 if (json.Response.Invoices) {
                     if (_.isArray(json.Response.Invoices.Invoice)) {
                         _.forEach(json.Response.Invoices.Invoice, function(invoice) {
@@ -91,22 +95,22 @@ module.exports = function(Xero, Cache, logger) {
             var max = 0;
             queryString += ' AND (';
             _.forEach(filters, function(item) {
+                queryString += 'InvoiceNumber=="' + item + '" OR ';
                 if (max <= 50) {
-                    queryString += 'InvoiceNumber=="' + item + '" OR ';
+                    max++;
                 } else {
                     filterList.push(_.trimRight(queryString, 'OR ') + ')');
                     max = 0;
                     queryString = '&where=Status == "' + status + '" AND (';
                 }
-
-                max++;
             });
+            if (max <= 50) {
+                filterList.push(_.trimRight(queryString, 'OR ') + ')');
+
+            }
 
             return filterList;
-            return _.trimRight(queryString, 'OR ') + ')';
         }
-
-        return queryString;
     }
 
     /**
@@ -217,19 +221,20 @@ module.exports = function(Xero, Cache, logger) {
 
                 var invoicesNumber = [];
                 _.forEach(csvData, function(invoice) {
-                    invoicesNumber.push(invoice[1]);
+                    invoicesNumber.push(invoice[0]);
                 });
 
                 return when.all(_.uniq(invoicesNumber));
             })
             .then(function(filters) {
-                return formatInvoiceNumberFilterNew('DRAFT', filters);
+                return formatInvoiceNumberFilterNew('PAID', filters);
 
             })
             .then(function(queryString) {
+
                 var cacheXeroInvoice = Cache.get('xero-invoices');
 
-                if (cacheXeroInvoice) {
+                if (cacheXeroInvoice.length > 0) {
                     return cacheXeroInvoice;
                 }
                 var promise = [];
@@ -313,6 +318,19 @@ module.exports = function(Xero, Cache, logger) {
 
     }
 
+    function deletePayment(payment, data, number) {
+        Xero.call('POST', '/Payments/' + payment.PaymentID, data, (err, json) => {
+            if (err) {
+                logger.error('Payment deleted for (' + number + ') ' + payment.PaymentID + '[' + payment.Date + ']');
+                // logger.error(err);
+            } else {
+                logger.info('Payment deleted for (' + number + ') ' + payment.PaymentID + '[' + payment.Date + ']');
+            }
+
+        });
+
+    }
+
     /**
      * Update invoices
      *
@@ -350,21 +368,21 @@ module.exports = function(Xero, Cache, logger) {
                     return when(json.Response)
                         .then(function(items) {
 
-                            //logger.debug(JSON.stringify(items))
+                                //logger.debug(JSON.stringify(items))
 
-                            InvoicesError = parseXeroResponse(items.Invoices.Invoice);
+                                InvoicesError = parseXeroResponse(items.Invoices.Invoice);
 
-                            var total = _.size(data);
-                            var errors = _.size(InvoicesError);
-                            if (errors) {
-                                logger.error('Xero Update Invoice Error %j', InvoicesError, {});
+                                var total = _.size(data);
+                                var errors = _.size(InvoicesError);
+                                if (errors) {
+                                    logger.error('Xero Update Invoice Error %j', InvoicesError, {});
+                                }
+                                logger.info('%s INVOICE(S) UPDATED SUCCESSFUL !', (total - errors) + '/' + total, {});
+                                //logger.info((total - errors) + '/' + total + ' INVOICE(S) UPDATED SUCCESSFUL !');
+
+                                return deferred.resolve(data);
                             }
-                            logger.info('%s INVOICE(S) UPDATED SUCCESSFUL !', (total - errors) + '/' + total, {});
-                            //logger.info((total - errors) + '/' + total + ' INVOICE(S) UPDATED SUCCESSFUL !');
-
-                            return deferred.resolve(data);
-                        }
-                    );
+                        );
                 }
             }
         );
@@ -425,6 +443,7 @@ module.exports = function(Xero, Cache, logger) {
         return deferred.promise;
     }
 
+
     return {
         listDraftInvoices: function() {
             var status = 'DRAFT';
@@ -457,7 +476,183 @@ module.exports = function(Xero, Cache, logger) {
                 })
                 .then(updateInvoice)
                 .catch(function(err) {
-                   // logger.error('Update discount error : %j', err, {});
+                    // logger.error('Update discount error : %j', err, {});
+                });
+        },
+
+        updateSpain: csvData => {
+            csvData.shift();
+            logger.debug(csvData);
+            when(csvData)
+                .then(getInvoiceList)
+                .then(xeroInvoices => {
+                    var payments = [];
+                    _.forEach(xeroInvoices, invoice => {
+                        logger.debug(invoice.InvoiceNumber);
+                        var payment = {
+                            Invoice: {
+                                InvoiceID: invoice.InvoiceID
+                            },
+                            Amount: invoice.AmountDue,
+                            Account: {
+                                AccountID: config.xero.account
+                            },
+                            Date: moment().format('YYYY-MM-DD'),
+                        }
+
+                        payments.push(payment);
+                    })
+                    return when.all(payments);
+                })
+                .then(payments => {
+                    updatePayments(payments)
+                })
+        },
+
+        removeSpain: csvData => {
+            csvData.shift();
+            logger.debug(csvData);
+            when(csvData)
+                .then(getInvoiceList)
+                .then(xeroInvoices => {
+                    var payments = [];
+                    _.forEach(xeroInvoices, invoice => {
+
+                        _.forEach(invoice.Payments, item => {
+
+                            // Xero.call('GET', '/Payments/' + item.PaymentID,  function(err, json) {
+                            //     if (err) {
+                            //         logger.error(err);
+                            //     } else {
+                            //         logger.debug(json);
+                            //     }
+                            // });
+
+
+                            payments = [];
+                            const payment = {
+                                Status: 'DELETED'
+                            };
+                            payments.push(payment);
+
+                            // Call Xero API delete payment
+                            if (item.Date !== '2016-11-30T00:00:00') {
+                                logger.debug(invoice.InvoiceNumber + ' -  ' + item.Date + ' -  ' + item.PaymentID);
+                                //deletePayment(item, payments, invoice.InvoiceNumber);
+                            }
+
+                            // deletePayment(item.PaymentID, payments);
+
+                        });
+                        // var payment = {
+                        //     Invoice: {
+                        //         InvoiceID: invoice.InvoiceID
+                        //     },
+                        //     Amount: invoice.AmountDue,
+                        //     Account: {
+                        //         AccountID: config.xero.account
+                        //     },
+                        //     Date: moment().format('YYYY-MM-DD'),
+                        // }
+
+                        //payments.push(payment);
+                    })
+                    //return when.all(payments);
+                })
+            // .then(payments => {
+            //    // updatePayments(payments)
+            // })
+        },
+
+        spainSetPaid: csvData => {
+            csvData.shift();
+            when(csvData)
+                .then(getInvoiceList)
+                .then(xeroInvoices => {
+                    if (_.isEmpty(xeroInvoices)) {
+                        return;
+                    }
+                    let i = 1;
+                    // logger.debug(csvData);
+                    let payments = [];
+                    _.forEach(csvData, item => {
+
+                        let xeroIndex = _.findIndex(xeroInvoices, function(xeroItem) {
+                            return xeroItem.InvoiceNumber == item[0];
+                        });
+
+                        let payment = {
+                            Invoice: {
+                                InvoiceID: xeroInvoices[xeroIndex].InvoiceID
+                            },
+                            Amount: xeroInvoices[xeroIndex].AmountDue,
+                            Account: {
+                                AccountID: config.xero.account
+                            },
+                            Date: moment(item[1], 'DD-MM-YYYY').format('YYYY-MM-DD'),
+
+                        };
+                        payments.push(payment);
+
+                    });
+                    return when.all(payments);
+                })
+                .then(payments => {
+                    let i = 1;
+                    _.forEach(payments, payment => {
+                        logger.debug(payment);
+                        logger.debug('=================================== ' + i);
+                        i++;
+                    });
+                    //updatePayments(payments);
+                });
+        },
+
+        checkPaiments: csvData => {
+            csvData.shift();
+            when(csvData)
+                .then(getInvoiceList)
+                .then(xeroInvoices => {
+                    if (_.isEmpty(xeroInvoices)) {
+                        return;
+                    }
+                    let i = 1;
+                    // logger.debug(csvData);
+                    let payments = [];
+                    _.forEach(csvData, item => {
+
+                        let xeroIndex = _.findIndex(xeroInvoices, function(xeroItem) {
+                            return xeroItem.InvoiceNumber == item[0];
+                        });
+
+                        if (!_.isUndefined(xeroInvoices[xeroIndex])) {
+                            logger.debug(xeroInvoices[xeroIndex].InvoiceNumber);
+                            logger.debug(xeroInvoices[xeroIndex].Payments);
+                            // let payment = {
+                            //     Invoice: {
+                            //         InvoiceID: xeroInvoices[xeroIndex].InvoiceID
+                            //     },
+                            //     Amount: xeroInvoices[xeroIndex].AmountDue,
+                            //     Account: {
+                            //         AccountID: config.xero.account
+                            //     },
+                            //     Date: moment(item[1], 'DD-MM-YYYY').format('YYYY-MM-DD'),
+                            //
+                            // };
+                           // payments.push(payment);
+                        }
+
+                    });
+                    return when.all(payments);
+                })
+                .then(payments => {
+                    let i = 1;
+                    _.forEach(payments, payment => {
+                        logger.debug(payment);
+                        logger.debug('=================================== ' + i);
+                        i++;
+                    });
+                    //updatePayments(payments);
                 });
         },
 
