@@ -81,6 +81,77 @@ module.exports = function(Xero, Cache, logger) {
     }
 
     /**
+     * List Xero invoices
+     *
+     * @param integer page current page
+     * @param string filter Invoices number list
+     * @returns {Promise|promise|*|Handler.promise|when.promise|Deferred.promise}
+     */
+    function listCreditNotes(page, filter, cacheEnabled) {
+        assert(_.isNumber(page));
+
+        if (cacheEnabled == undefined) {
+            cacheEnabled = true;
+        }
+
+        var deferred = when.defer();
+
+        // Read json cache file !
+        if (cacheEnabled) {
+            var cacheXeroInvoices = Cache.get('xero-creditnotes');
+            if (cacheXeroInvoices) {
+                deferred.resolve(cacheXeroInvoices);
+
+                return deferred.promise;
+            }
+        }
+
+        logger.info('Calling Xero list credit notes ...');
+
+        //Xero.call('GET', '/Invoices/?page=' + page + filter + ' AND InvoiceNumber="AR1493"', null, function(err, json) {
+        Xero.call('GET', '/CreditNotes/?page=' + page + filter, null, function(err, json) {
+            //logger.debug('/Invoices/?page=' + page + filter + ' AND InvoiceNumber="AR1493"');
+            if (err) {
+                logger.error(err);
+                deferred.reject({
+                    status: 'KO',
+                    message: err
+                });
+            } else {
+                logger.info('/CreditNotes/?page=' + page + filter);
+                //logger.debug(json.Response.CreditNotes);
+                if (json.Response.CreditNotes) {
+                    if (_.isArray(json.Response.CreditNotes.CreditNote)) {
+                        _.forEach(json.Response.CreditNotes.CreditNote, function(invoice) {
+                            creditNoteList.push(invoice);
+                        });
+                    } else {
+                        creditNoteList.push(json.Response.CreditNotes.CreditNote);
+                    }
+                    logger.info('[xero] On met en cache [%s]', filter, {});
+                    if (cacheEnabled) {
+                        Cache.set('xero-creditnotes', creditNoteList);
+                    }
+
+                    deferred.resolve(creditNoteList);
+                    //logger.debug(json.Response.CreditNotes);
+                    //deferred.resolve(listCreditNotes(page + 1, filter, cacheEnabled));
+                } else {
+
+                    logger.info('[xero] On met en cache [%s]', filter, {});
+                    if (cacheEnabled) {
+                        Cache.set('xero-creditnotes', creditNoteList);
+                    }
+
+                    deferred.resolve(creditNoteList);
+                }
+            }
+        });
+
+        return deferred.promise;
+    }
+
+    /**
      * Format filter (invoice number)
      *
      * @param array filters Array of invoices number
@@ -91,6 +162,7 @@ module.exports = function(Xero, Cache, logger) {
 
         var queryString = '&where=Status == "' + status + '"';
 
+
         if (filters) {
             var max = 0;
             queryString += ' AND (';
@@ -99,13 +171,47 @@ module.exports = function(Xero, Cache, logger) {
                 if (max <= 50) {
                     max++;
                 } else {
-                    filterList.push(_.trimRight(queryString, 'OR ') + ')');
+                    filterList.push(_.trimEnd(queryString, 'OR ') + ')');
                     max = 0;
                     queryString = '&where=Status == "' + status + '" AND (';
                 }
             });
             if (max <= 50) {
-                filterList.push(_.trimRight(queryString, 'OR ') + ')');
+                filterList.push(_.trimEnd(queryString, 'OR ') + ')');
+
+            }
+
+            return filterList;
+        }
+    }
+
+    /**
+     * Format filter (invoice number)
+     *
+     * @param array filters Array of invoices number
+     *
+     * @returns {string}
+     */
+    function formatCreditNotNumberFilterNew(status, filters) {
+
+        var queryString = '&where=Status == "' + status + '"';
+
+
+        if (filters) {
+            var max = 0;
+            queryString += ' AND (';
+            _.forEach(filters, function(item) {
+                queryString += 'CreditNoteNumber=="' + item + '" OR ';
+                if (max <= 20) {
+                    max++;
+                } else {
+                    filterList.push(_.trimEnd(queryString, 'OR ') + ')');
+                    max = 0;
+                    queryString = '&where=Status == "' + status + '" AND (';
+                }
+            });
+            if (max <= 20) {
+                filterList.push(_.trimEnd(queryString, 'OR ') + ')');
 
             }
 
@@ -147,55 +253,55 @@ module.exports = function(Xero, Cache, logger) {
      * @param string filter Invoices number list
      * @returns {Promise|promise|*|Handler.promise|when.promise|Deferred.promise}
      */
-    function listCreditNotes(filter, cacheEnabled) {
-
-        if (cacheEnabled == undefined) {
-            cacheEnabled = true;
-        }
-
-        var deferred = when.defer();
-
-        // Read json cache file !
-        if (cacheEnabled) {
-            var cacheXeroInvoices = Cache.get('xero-creditnotes');
-            if (cacheXeroInvoices) {
-                deferred.resolve(cacheXeroInvoices);
-
-                return deferred.promise;
-            }
-        }
-
-        logger.info('Calling Xero list credit notes ...');
-        Xero.call('GET', '/CreditNotes/?' + filter, null, function(err, json) {
-            logger.info('query  ' + '/CreditNotes/?page=1' + filter);
-            if (err) {
-                logger.error(err);
-                deferred.reject({
-                    status: 'KO',
-                    message: err
-                });
-            } else {
-                if (json.Response.CreditNotes) {
-                    if (_.isArray(json.Response.CreditNotes.CreditNote)) {
-                        _.forEach(json.Response.CreditNotes.CreditNote, function(creditNote) {
-                            creditNoteList.push(creditNote);
-                        });
-                    } else {
-                        creditNoteList.push(json.Response.CreditNotes.CreditNote);
-                    }
-
-                    logger.info('[xero] On met en cache [%s]', filter, {});
-                    if (cacheEnabled) {
-                        Cache.set('xero-creditnotes', creditNoteList);
-                    }
-
-                    deferred.resolve(creditNoteList);
-                }
-            }
-        });
-
-        return deferred.promise;
-    }
+    // function listCreditNotes(filter, cacheEnabled) {
+    //
+    //     if (cacheEnabled == undefined) {
+    //         cacheEnabled = true;
+    //     }
+    //
+    //     var deferred = when.defer();
+    //
+    //     // Read json cache file !
+    //     if (cacheEnabled) {
+    //         var cacheXeroInvoices = Cache.get('xero-creditnotes');
+    //         if (cacheXeroInvoices) {
+    //             deferred.resolve(cacheXeroInvoices);
+    //
+    //             return deferred.promise;
+    //         }
+    //     }
+    //
+    //     logger.info('Calling Xero list credit notes ...');
+    //     Xero.call('GET', '/CreditNotes/?' + filter, null, function(err, json) {
+    //         logger.info('query  ' + '/CreditNotes/?page=1' + filter);
+    //         if (err) {
+    //             logger.error(err);
+    //             deferred.reject({
+    //                 status: 'KO',
+    //                 message: err
+    //             });
+    //         } else {
+    //             if (json.Response.CreditNotes) {
+    //                 if (_.isArray(json.Response.CreditNotes.CreditNote)) {
+    //                     _.forEach(json.Response.CreditNotes.CreditNote, function(creditNote) {
+    //                         creditNoteList.push(creditNote);
+    //                     });
+    //                 } else {
+    //                     creditNoteList.push(json.Response.CreditNotes.CreditNote);
+    //                 }
+    //
+    //                 logger.info('[xero] On met en cache [%s]', filter, {});
+    //                 if (cacheEnabled) {
+    //                     Cache.set('xero-creditnotes', creditNoteList);
+    //                 }
+    //
+    //                 deferred.resolve(creditNoteList);
+    //             }
+    //         }
+    //     });
+    //
+    //     return deferred.promise;
+    // }
 
     function createQuery(status) {
         var queryString = '&where=CreditNoteNumber.StartsWith("AF") AND (';
@@ -227,7 +333,7 @@ module.exports = function(Xero, Cache, logger) {
                 return when.all(_.uniq(invoicesNumber));
             })
             .then(function(filters) {
-                return formatInvoiceNumberFilterNew('PAID', filters);
+                return formatInvoiceNumberFilterNew('AUTHORISED', filters);
 
             })
             .then(function(queryString) {
@@ -246,6 +352,49 @@ module.exports = function(Xero, Cache, logger) {
                 return when.all(promise).then(function(data) {
                     Cache.set('xero-invoices', invoiceList);
                     return invoiceList;
+                });
+            });
+    }
+
+    /**
+     * Get invoice list
+     *
+     * @param array csvData Invoice data from CSV
+     * @returns {*|Promise}
+     */
+    function getCreditNoteList(csvData) {
+        assert(_.isObject(csvData));
+
+        return when(csvData)
+            .then(function(csvData) {
+
+                var invoicesNumber = [];
+                _.forEach(csvData, function(invoice) {
+                    invoicesNumber.push(invoice[1]);
+                });
+
+                return when.all(_.uniq(invoicesNumber));
+            })
+            .then(function(filters) {
+                return formatCreditNotNumberFilterNew('AUTHORISED', filters);
+
+            })
+            .then(function(queryString) {
+
+                var cacheXeroInvoice = Cache.get('xero-creditnotes');
+
+                if (cacheXeroInvoice.length > 0) {
+                    return cacheXeroInvoice;
+                }
+                var promise = [];
+
+                _.forEach(queryString, function(filter) {
+                    promise.push(listCreditNotes(1, filter, false));
+                });
+
+                return when.all(promise).then(function(data) {
+                    Cache.set('xero-creditnotes', creditNoteList);
+                    return creditNoteList;
                 });
             });
     }
@@ -528,7 +677,6 @@ module.exports = function(Xero, Cache, logger) {
                             //     }
                             // });
 
-
                             payments = [];
                             const payment = {
                                 Status: 'DELETED'
@@ -538,7 +686,7 @@ module.exports = function(Xero, Cache, logger) {
                             // Call Xero API delete payment
                             if (item.Date !== '2016-11-30T00:00:00') {
                                 logger.debug(invoice.InvoiceNumber + ' -  ' + item.Date + ' -  ' + item.PaymentID);
-                                //deletePayment(item, payments, invoice.InvoiceNumber);
+                                deletePayment(item, payments, invoice.InvoiceNumber);
                             }
 
                             // deletePayment(item.PaymentID, payments);
@@ -563,7 +711,62 @@ module.exports = function(Xero, Cache, logger) {
             //    // updatePayments(payments)
             // })
         },
+        // Call end point CreditNote/ID/Allocations to allocate existing CN to invoices.
+        AllocateCreditNote: csvData => {
+            csvData.shift();
 
+            when(csvData)
+                .then(getInvoiceList)
+                .then(xeroInvoices => {
+                    let invoices = {};
+                    _.forEach(xeroInvoices, item => {
+                        invoices[item.InvoiceNumber] = item.InvoiceID;
+                        // invoices.push({
+                        //     [item.InvoiceNumber] : item.InvoiceID
+                        // });
+                    });
+
+                    return invoices;
+
+                })
+                .then(invoices => {
+                    when(csvData)
+                        .then(getCreditNoteList)
+                        .then(xeroCreditNotes => {
+                            _.forEach(csvData, item => {
+                                let xeroIndex = _.findIndex(xeroCreditNotes, function(xeroItem) {
+                                    return xeroItem.CreditNoteNumber == item[1];
+                                });
+
+                                let amount = _.replace(item[2], ',', '.');
+
+                                // Use buffer because endpoint is not enabled
+                                let Allocation =
+                                    '<Allocations>' +
+                                    '<Allocation>' +
+                                    '<AppliedAmount>' + Math.abs(_.toNumber(amount)) + '</AppliedAmount>' +
+                                    '<Invoice>' +
+                                    '<InvoiceID>' + invoices[item[0]] + '</InvoiceID>' +
+                                    '</Invoice>' +
+                                    '</Allocation>' +
+                                    '</Allocations>';
+
+                                logger.debug(Allocation);
+                                let data = new Buffer(Allocation);
+
+                                // if (item[0] === 'ES01081') {
+                                Xero.call('PUT', '/CreditNotes/' + xeroCreditNotes[xeroIndex].CreditNoteID + '/Allocations', data, (err, json) => {
+                                    if (err) {
+                                        logger.error(err);
+                                    } else {
+                                        logger.debug(json);
+                                    }
+                                });
+                            });
+                        });
+
+                });
+        },
         spainSetPaid: csvData => {
             csvData.shift();
             when(csvData)
@@ -639,7 +842,7 @@ module.exports = function(Xero, Cache, logger) {
                             //     Date: moment(item[1], 'DD-MM-YYYY').format('YYYY-MM-DD'),
                             //
                             // };
-                           // payments.push(payment);
+                            // payments.push(payment);
                         }
 
                     });
